@@ -1,0 +1,6 @@
+{
+  "name": "Wits Lingo",
+  "description": "WITS LINGO — A Global Language Platform. Practical English language learning and online interactive batch classes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

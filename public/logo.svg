@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Soft outer drop shadow -->
+    <filter id="badge-shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+
+    <!-- Subtle gradient on deep purple circle -->
+    <linearGradient id="purple-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#311F58" />
+      <stop offset="50%" stop-color="#281A4C" />
+      <stop offset="100%" stop-color="#1E123B" />
+    </linearGradient>
+
+    <!-- Brain gradients -->
+    <linearGradient id="brain-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFB3C6" />
+      <stop offset="100%" stop-color="#F397B0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Deep Purple Circular Emblem -->
+  <circle cx="250" cy="250" r="225" fill="url(#purple-bg)" filter="url(#badge-shadow)" />
+
+  <!-- DYNAMIC SWOOPING ARROW (Behind Brain) -->
+  <g>
+    <!-- Looping arrow tail behind brain -->
+    <path
+      d="M 205 210
+         C 225 218, 255 228, 280 220
+         C 325 208, 342 188, 335 170
+         C 328 152, 298 150, 276 168
+         C 255 186, 260 215, 278 226
+         C 298 238, 328 228, 338 205
+         C 350 178, 325 140, 248 135"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="6.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <!-- Arrowhead at top pointing leftwards/upwards -->
+    <path
+      d="M 264 121 L 244 135 L 268 147"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="6.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- BRAIN MASCOT -->
+  <g id="brain-character">
+    <!-- Pink stick legs standing on the 'W' and 'i' -->
+    <path d="M 160 200 L 158 228" stroke="#E27E95" stroke-width="5" stroke-linecap="round" />
+    <path d="M 183 200 L 185 228" stroke="#E27E95" stroke-width="5" stroke-linecap="round" />
+
+    <!-- Brain Lobe Body -->
+    <g fill="url(#brain-grad)" stroke="#E27E95" stroke-width="2.5" stroke-linejoin="round">
+      <!-- Main Brain Mass composed of overlapping organic lobes -->
+      <path d="
+        M 132 185
+        C 118 185, 110 172, 114 158
+        C 110 148, 115 136, 126 132
+        C 126 122, 136 114, 148 116
+        C 156 108, 172 108, 182 115
+        C 192 110, 208 112, 214 122
+        C 225 125, 230 138, 226 150
+        C 232 162, 226 176, 214 182
+        C 216 192, 206 200, 194 198
+        C 186 204, 172 205, 164 199
+        C 152 204, 138 200, 134 192
+        Z
+      " />
+    </g>
+
+    <!-- Brain Surface Convolutions / Folds -->
+    <g fill="none" stroke="#DE6B85" stroke-width="3" stroke-linecap="round">
+      <path d="M 138 142 C 146 138, 154 142, 152 150" />
+      <path d="M 158 126 C 166 122, 176 126, 172 135" />
+      <path d="M 188 124 C 196 126, 198 136, 194 142" />
+      <path d="M 210 145 C 218 152, 216 162, 208 166" />
+      <path d="M 124 165 C 130 168, 136 166, 136 172" />
+    </g>
+
+    <!-- Big Round Spectacles -->
+    <g id="glasses">
+      <!-- Left Rim -->
+      <circle cx="152" cy="162" r="14.5" fill="#FFFFFF" fill-opacity="0.15" stroke="#1D1929" stroke-width="4.5" />
+      <!-- Right Rim -->
+      <circle cx="184" cy="162" r="14.5" fill="#FFFFFF" fill-opacity="0.15" stroke="#1D1929" stroke-width="4.5" />
+      <!-- Bridge -->
+      <path d="M 166.5 160 Q 168 156 169.5 160" fill="none" stroke="#1D1929" stroke-width="4.5" stroke-linecap="round" />
+      
+      <!-- Smiling Eyes behind glasses -->
+      <circle cx="153" cy="162" r="3.5" fill="#1D1929" />
+      <circle cx="154.5" cy="160.5" r="1.2" fill="#FFFFFF" />
+
+      <circle cx="183" cy="162" r="3.5" fill="#1D1929" />
+      <circle cx="184.5" cy="160.5" r="1.2" fill="#FFFFFF" />
+    </g>
+
+    <!-- Cute Smiling Mouth -->
+    <path d="M 164 175 Q 168 180 173 175" fill="none" stroke="#1D1929" stroke-width="3" stroke-linecap="round" />
+
+    <!-- Open Book in hands -->
+    <g id="book">
+      <!-- Dark Cover -->
+      <path d="M 178 198 L 196 174 L 232 188 L 214 213 Z" fill="#4B5162" />
+      <!-- White Pages -->
+      <path d="M 183 194 L 198 175 L 214 182 L 200 201 Z" fill="#F4F5F8" />
+      <path d="M 200 201 L 214 182 L 228 187 L 213 207 Z" fill="#FFFFFF" />
+      <path d="M 199 176 L 200 202" stroke="#D1D5DB" stroke-width="1.5" />
+      <!-- Page text lines simulation -->
+      <line x1="187" y1="187" x2="196" y2="191" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round" />
+      <line x1="189" y1="192" x2="197" y2="195" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round" />
+      <line x1="205" y1="190" x2="216" y2="193" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round" />
+      <line x1="204" y1="195" x2="214" y2="198" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round" />
+
+      <!-- Cute Pink Hands Holding Book -->
+      <ellipse cx="178" cy="190" rx="5" ry="4" fill="#F7A3B7" stroke="#DE6B85" stroke-width="1.5" />
+      <ellipse cx="204" cy="204" rx="5" ry="4" fill="#F7A3B7" stroke="#DE6B85" stroke-width="1.5" />
+    </g>
+
+    <!-- Graduation Mortarboard (Cap) -->
+    <g id="graduation-cap" transform="rotate(-12 145 125)">
+      <!-- Under-skullcap -->
+      <path d="M 132 126 Q 146 132 162 127 L 160 133 Q 146 138 132 131 Z" fill="#1C1826" />
+      <!-- Top Diamond Board -->
+      <polygon points="146,108 178,121 146,134 114,121" fill="#2E283E" stroke="#16131F" stroke-width="2" />
+      <!-- Center button -->
+      <circle cx="146" cy="121" r="3" fill="#16131F" />
+      <!-- Tassel string -->
+      <path d="M 146 121 Q 128 128 124 139" fill="none" stroke="#16131F" stroke-width="2.5" stroke-linecap="round" />
+      <!-- Tassel brush -->
+      <path d="M 124 139 L 121 150 L 127 150 Z" fill="#16131F" />
+    </g>
+  </g>
+
+  <!-- "Wits" TYPOGRAPHY (Bold, High-Contrast Serif) -->
+  <g id="wits-typography" fill="#FFFFFF">
+    <!-- Letter 'W' with dramatic curved serifs -->
+    <path d="
+      M 78 226
+      C 94 226, 108 232, 114 246
+      C 118 255, 120 270, 122 288
+      C 124 306, 126 322, 134 326
+      C 142 328, 150 318, 156 302
+      L 172 260
+      C 176 250, 180 236, 172 230
+      C 166 226, 158 226, 158 226
+      L 194 226
+      C 190 232, 184 240, 182 250
+      L 162 316
+      C 154 340, 142 352, 126 352
+      C 110 352, 98 338, 94 316
+      C 90 292, 88 274, 82 260
+      C 76 248, 68 242, 58 240
+      L 58 226
+      Z
+    " />
+    <!-- Second half of 'W' -->
+    <path d="
+      M 148 350
+      L 194 234
+      C 198 226, 206 226, 218 226
+      L 218 238
+      C 208 240, 202 248, 198 258
+      L 178 316
+      C 172 334, 168 346, 160 350
+      Z
+      M 194 260
+      L 220 332
+      C 224 342, 230 350, 240 350
+      C 246 350, 252 344, 258 332
+      L 282 278
+      L 284 290
+      L 262 342
+      C 254 350, 242 354, 232 354
+      C 220 354, 210 344, 204 330
+      Z
+    " />
+
+    <!-- Letter 'i' with crescent-curved leaf dot -->
+    <g id="letter-i">
+      <!-- Unique crescent dot -->
+      <path d="M 270 234 C 278 232, 292 235, 302 244 C 294 246, 280 244, 270 234 Z" />
+      <!-- Stem with top & bottom serifs -->
+      <path d="
+        M 264 262
+        L 288 262
+        L 288 338
+        C 288 344, 294 348, 304 348
+        L 304 352
+        L 256 352
+        L 256 348
+        C 266 348, 272 344, 272 338
+        L 272 276
+        C 272 270, 266 266, 256 266
+        Z
+      " />
+    </g>
+
+    <!-- Letter 't' with crossbar and swooping foot -->
+    <g id="letter-t">
+      <!-- Top crossbar & stem -->
+      <path d="
+        M 302 278
+        L 302 264
+        L 316 264
+        L 316 244
+        L 330 240
+        L 330 264
+        L 352 264
+        L 352 278
+        L 330 278
+        L 330 328
+        C 330 342, 338 348, 350 348
+        C 356 348, 362 344, 366 338
+        L 370 344
+        C 362 352, 350 356, 338 356
+        C 320 356, 314 344, 314 326
+        L 314 278
+        Z
+      " />
+    </g>
+
+    <!-- Letter 's' with teardrop terminal and bold curves -->
+    <g id="letter-s">
+      <path d="
+        M 412 268
+        C 406 256, 394 250, 380 250
+        C 364 250, 352 258, 352 272
+        C 352 284, 362 292, 378 298
+        C 402 306, 418 316, 418 334
+        C 418 350, 402 358, 382 358
+        C 366 358, 352 350, 344 338
+        L 352 330
+        C 360 342, 372 348, 384 348
+        C 398 348, 406 340, 406 330
+        C 406 318, 394 310, 376 302
+        C 356 294, 340 286, 340 268
+        C 340 252, 356 242, 376 242
+        C 392 242, 406 250, 414 262
+        Z
+      " />
+      <!-- Top teardrop bulb terminal on 's' -->
+      <circle cx="414" cy="265" r="7" />
+    </g>
+  </g>
+</svg>
