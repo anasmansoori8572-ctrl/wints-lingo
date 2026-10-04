@@ -112,7 +112,8 @@ export const INITIAL_BATCHES: Batch[] = [
     maxCapacity: 35,
     status: 'Active',
     teacherName: 'Ziyaur Rehman Zia',
-    isVisibleOnWebsite: true
+    isVisibleOnWebsite: true,
+    googleMeetLink: 'https://meet.google.com/spk-oct26-live'
   },
   {
     id: 'batch-spoken-nov-2026',
@@ -129,7 +130,8 @@ export const INITIAL_BATCHES: Batch[] = [
     maxCapacity: 35,
     status: 'Upcoming',
     teacherName: 'Ziyaur Rehman Zia',
-    isVisibleOnWebsite: true
+    isVisibleOnWebsite: true,
+    googleMeetLink: 'https://meet.google.com/spk-nov26-live'
   },
   {
     id: 'batch-found-oct-2026',
@@ -146,7 +148,8 @@ export const INITIAL_BATCHES: Batch[] = [
     maxCapacity: 30,
     status: 'Active',
     teacherName: 'Ziyaur Rehman Zia',
-    isVisibleOnWebsite: true
+    isVisibleOnWebsite: true,
+    googleMeetLink: 'https://meet.google.com/fnd-oct26-live'
   }
 ];
 
@@ -207,7 +210,9 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   upiId: '8791287575@ybl',
   upiNumber: '+91 8791287575',
   razorpayPaymentLink: 'https://rzp.io/l/witslingo',
-  paypalEmailOrLink: 'https://paypal.me/witslingo'
+  paypalEmailOrLink: 'https://paypal.me/witslingo',
+  heroVideoUrl: '/video/wits-lingo-intro.mp4',
+  heroVideoPosterUrl: '/video/wits-lingo-poster.jpg'
 };
 
 export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
@@ -262,6 +267,75 @@ export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [
     category: 'General',
     effectiveDate: 'Available Now',
     isPinned: false
+  }
+];
+
+export const INITIAL_GALLERY_ITEMS: import('../types').GalleryItem[] = [
+  {
+    id: 'gal-01',
+    title: 'Interactive Live Spoken English Session',
+    caption: 'Students engaging in real-time conversational speaking drills, overcoming hesitation with guided peer discussions.',
+    category: 'Live Sessions',
+    imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 1,
+    uploadedAt: '2026-09-15T10:00:00Z',
+    fileSize: '1.2 MB'
+  },
+  {
+    id: 'gal-02',
+    title: 'Confidence Building & Public Speaking Workshop',
+    caption: 'Dedicated masterclass session on stage presence, body language articulation, and spontaneous speaking.',
+    category: 'Events & Workshops',
+    imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 2,
+    uploadedAt: '2026-09-18T14:30:00Z',
+    fileSize: '1.5 MB'
+  },
+  {
+    id: 'gal-03',
+    title: '1-on-1 Mock Interview & Evaluation',
+    caption: 'Personalized feedback and mock interview simulation preparing students for top corporate job placements.',
+    category: 'Student Activities',
+    imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 3,
+    uploadedAt: '2026-09-20T11:15:00Z',
+    fileSize: '1.1 MB'
+  },
+  {
+    id: 'gal-04',
+    title: 'Collaborative Group Discussion & Debate',
+    caption: 'Learners actively participating in structured debate rounds to hone persuasion, argumentation, and fluency.',
+    category: 'Classrooms',
+    imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 4,
+    uploadedAt: '2026-09-22T16:00:00Z',
+    fileSize: '1.8 MB'
+  },
+  {
+    id: 'gal-05',
+    title: 'WITS LINGO Student Community Meetup',
+    caption: 'Connecting passionate English learners across India, celebrating milestones, and sharing inspiring transformation stories.',
+    category: 'Community',
+    imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 5,
+    uploadedAt: '2026-09-25T09:45:00Z',
+    fileSize: '1.4 MB'
+  },
+  {
+    id: 'gal-06',
+    title: 'Vocabulary & Pronunciation Mastery Drill',
+    caption: 'In-depth breakdown of phonetics, eliminating Mother Tongue Influence (MTI) with practical articulation practice.',
+    category: 'Classrooms',
+    imageUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80',
+    isPublished: true,
+    displayOrder: 6,
+    uploadedAt: '2026-09-28T12:20:00Z',
+    fileSize: '1.3 MB'
   }
 ];
 

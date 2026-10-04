@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
 /* Global Mobile Viewport & Responsive Safeguards */
+html {
+  scroll-behavior: smooth;
+}
+
 html,
 body,
 #root {
@@ -13,6 +17,25 @@ body,
 
 * {
   box-sizing: border-box;
+}
+
+/* Custom sleek scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f0f5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4cde6;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9d8ec2;
 }
 
 /* Ensure embedded media never blows out container bounds on small screens */
@@ -36,5 +59,18 @@ svg {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+}
+
+/* Subtle transitions for interactive elements */
+button, a, input, select, textarea {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Accessible focus ring style */
+:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
 }
 

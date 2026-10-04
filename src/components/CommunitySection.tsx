@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageCircle, Instagram, Facebook, ArrowRight, Sparkles, Bell, CheckCircle2 } from 'lucide-react';
+import { MessageCircle, Instagram, Facebook, ArrowRight, Bell } from 'lucide-react';
 
 interface CommunitySectionProps {
   onJoinNewJourney: () => void;
@@ -11,7 +11,7 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoinNewJou
   const instagramUrl = siteSettings?.instagramUrl || "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==";
   const facebookUrl = siteSettings?.facebookUrl || "https://www.facebook.com/share/1BP5jTfk9B/";
   return (
-    <section id="community" className="py-20 bg-gradient-to-b from-[#FAF8FD] to-white">
+    <section id="community" className="py-20 sm:py-24 bg-gradient-to-b from-[#FAF8FD] to-white border-b border-slate-200/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <div className="bg-gradient-to-br from-[#3B0764] via-[#4A1D96] to-[#2E1065] rounded-3xl p-8 sm:p-12 lg:p-16 text-white shadow-xl shadow-purple-950/15 relative overflow-hidden">
@@ -22,12 +22,12 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoinNewJou
 
           <div className="max-w-3xl mx-auto text-center space-y-6 relative z-10">
             
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-purple-200 text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-purple-200 text-xs font-bold uppercase tracking-wider shadow-2xs">
               <Bell className="w-3.5 h-3.5 text-purple-300" />
               <span>Official Community</span>
             </div>
 
-            <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+            <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-[3rem] font-extrabold tracking-tight leading-tight">
               Learn English Every Day
             </h2>
 

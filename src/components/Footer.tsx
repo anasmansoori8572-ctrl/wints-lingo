@@ -6,20 +6,21 @@ import { SiteSettings } from '../types';
 interface FooterProps {
   onOpenAdmin?: () => void;
   onOpenSystemReport?: () => void;
+  onNavigateGallery?: () => void;
   siteSettings?: SiteSettings;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport, siteSettings }) => {
+export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport, onNavigateGallery, siteSettings }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <footer className="bg-[#191522] text-white pt-16 pb-12 border-t border-purple-950">
+    <footer className="bg-[#14101D] text-white pt-16 sm:pt-20 pb-12 border-t border-purple-950/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Main Footer Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-12 border-b border-white/10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 sm:gap-12 pb-12 border-b border-white/10">
           
           {/* Brand Col */}
           <div className="lg:col-span-2 space-y-4">
@@ -31,12 +32,12 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               Operating under <strong className="text-white font-medium">{siteSettings?.academyName || 'WITS LINGO'}</strong>. Practical spoken English and communication skills for ambitious learners across India.
             </p>
 
-            <div className="flex items-center gap-2.5 pt-2">
+            <div className="flex items-center gap-2 pt-2">
               <a
                 href={siteSettings?.whatsappChannelUrl || "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-emerald-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-emerald-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="WhatsApp Channel"
               >
                 <MessageCircle className="w-4 h-4" />
@@ -45,7 +46,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 href={siteSettings?.instagramUrl || "https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA=="}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-pink-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-pink-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="Instagram"
               >
                 <Instagram className="w-4 h-4" />
@@ -54,7 +55,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 href={siteSettings?.facebookUrl || "https://www.facebook.com/share/1BP5jTfk9B/"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-blue-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-blue-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="Facebook"
               >
                 <Facebook className="w-4 h-4" />
@@ -63,7 +64,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 href={siteSettings?.youtubeUrl || "https://www.youtube.com/@witslingo"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+                className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-red-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
                 title="YouTube"
               >
                 <Youtube className="w-4 h-4" />
@@ -72,11 +73,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
           </div>
 
           {/* Quick Links */}
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               Platform
             </h4>
-            <ul className="space-y-2 text-xs text-slate-400">
+            <ul className="space-y-2.5 text-xs text-slate-400">
               <li>
                 <a href="#courses" className="hover:text-white transition-colors">Courses</a>
               </li>
@@ -88,6 +89,20 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               </li>
               <li>
                 <a href="#learning-resources" className="hover:text-white transition-colors">Learning Resources</a>
+              </li>
+              <li>
+                <a 
+                  href="/gallery" 
+                  onClick={(e) => {
+                    if (onNavigateGallery) {
+                      e.preventDefault();
+                      onNavigateGallery();
+                    }
+                  }}
+                  className="hover:text-white transition-colors font-medium text-purple-200"
+                >
+                  Gallery & Moments
+                </a>
               </li>
               <li>
                 <a href="#contact" className="hover:text-white transition-colors">Contact</a>
@@ -107,11 +122,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
           </div>
 
           {/* Community & Social */}
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               Community
             </h4>
-            <ul className="space-y-2 text-xs text-slate-400">
+            <ul className="space-y-2.5 text-xs text-slate-400">
               <li>
                 <a
                   href="https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k"
@@ -144,7 +159,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               </li>
               <li>
                 <a
-                  href="https://www.youtube.com"
+                  href="https://www.youtube.com/@witslingo"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition-colors"
@@ -156,22 +171,22 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
           </div>
 
           {/* Institutional Contact */}
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-widest text-purple-300 font-['Outfit']">
               {siteSettings?.academyName || 'Wits Lingo Academy'}
             </h4>
-            <div className="space-y-2 text-xs text-slate-400">
-              <p className="flex items-start gap-1.5">
+            <div className="space-y-2.5 text-xs text-slate-400">
+              <p className="flex items-start gap-2">
                 <MapPin className="w-3.5 h-3.5 text-purple-400 flex-shrink-0 mt-0.5" />
                 <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh, India'}</span>
               </p>
-              <p className="flex items-center gap-1.5">
+              <p className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                 <a href={`mailto:${siteSettings?.email || 'Witslingo@gmail.com'}`} className="hover:text-white">
                   {siteSettings?.email || 'Witslingo@gmail.com'}
                 </a>
               </p>
-              <p className="flex items-center gap-1.5">
+              <p className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                 <span>
                   {siteSettings?.phone1 || '+91 7310952271'} {siteSettings?.phone2 ? `/ ${siteSettings.phone2}` : '/ 8791287575'}
@@ -184,7 +199,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 <button
                   onClick={onOpenAdmin}
                   id="footer-admin-link-btn"
-                  className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-white transition-colors py-1 px-2.5 rounded-lg bg-purple-900/40 hover:bg-purple-900/80 border border-purple-800/60"
+                  className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-white transition-colors py-1.5 px-3 rounded-xl bg-purple-900/40 hover:bg-purple-900/80 border border-purple-800/60 cursor-pointer"
                 >
                   <Shield className="w-3 h-3 text-purple-400" />
                   <span>Admin Admission & Portal</span>
@@ -206,7 +221,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
             {onOpenSystemReport && (
               <button
                 onClick={onOpenSystemReport}
-                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-900/40 hover:bg-purple-900/80 px-2.5 py-1 rounded-md border border-purple-800/40 font-medium cursor-pointer"
+                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-900/40 hover:bg-purple-900/80 px-2.5 py-1 rounded-lg border border-purple-800/40 font-medium cursor-pointer"
                 title="Download Website Report (PDF)"
               >
                 <FileText className="w-3.5 h-3.5 text-purple-400" />
@@ -218,7 +233,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               <button
                 onClick={onOpenAdmin}
                 id="footer-admin-btn"
-                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-950/60 hover:bg-purple-900/80 px-2.5 py-1 rounded-md border border-purple-800/40 font-medium"
+                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-950/60 hover:bg-purple-900/80 px-2.5 py-1 rounded-lg border border-purple-800/40 font-medium cursor-pointer"
               >
                 <Shield className="w-3.5 h-3.5 text-purple-400" />
                 <span>Admin Dashboard</span>
@@ -227,7 +242,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
 
             <button
               onClick={scrollToTop}
-              className="flex items-center gap-1 text-purple-300 hover:text-white transition-colors"
+              className="flex items-center gap-1 text-purple-300 hover:text-white transition-colors cursor-pointer"
             >
               <span>Back to top</span>
               <ArrowUp className="w-3 h-3" />

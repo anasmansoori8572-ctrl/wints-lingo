@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, CheckCircle, BookOpen, Brain, Sparkles, Smile, Compass } from 'lucide-react';
+import { ArrowRight, BookOpen, Brain, Sparkles, Smile, Compass, CheckCircle2 } from 'lucide-react';
 
 export const AboutSection: React.FC = () => {
   const learningSteps = [
@@ -8,58 +8,58 @@ export const AboutSection: React.FC = () => {
       title: 'Learn',
       desc: 'Acquire real-life words and useful expressions in meaningful contexts.',
       icon: BookOpen,
-      color: 'bg-purple-100 text-purple-800',
+      color: 'bg-purple-100/80 text-[#4A1D96]',
     },
     {
       step: '02',
       title: 'Understand',
       desc: 'Grasp the underlying concept and natural structure without robotic memorisation.',
       icon: Brain,
-      color: 'bg-indigo-100 text-indigo-800',
+      color: 'bg-indigo-100/80 text-indigo-800',
     },
     {
       step: '03',
       title: 'Practise',
       desc: 'Participate in guided drills, audio roleplays, and interactive conversational scenarios.',
       icon: Compass,
-      color: 'bg-violet-100 text-violet-800',
+      color: 'bg-violet-100/80 text-violet-800',
     },
     {
       step: '04',
       title: 'Speak',
       desc: 'Shed hesitation and articulate thoughts out loud in batch sessions.',
       icon: Smile,
-      color: 'bg-emerald-100 text-emerald-800',
+      color: 'bg-emerald-100/80 text-emerald-800',
     },
     {
       step: '05',
       title: 'Grow',
       desc: 'Transform into a spontaneous, self-assured, and confident English communicator.',
       icon: Sparkles,
-      color: 'bg-purple-100 text-purple-900',
+      color: 'bg-purple-100/80 text-purple-900',
     },
   ];
 
   return (
-    <section id="about" className="py-20 bg-white border-b border-purple-50">
+    <section id="about" className="py-20 sm:py-24 bg-white border-b border-slate-200/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="max-w-3xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-100 text-xs font-bold text-[#4A1D96] uppercase tracking-wider">
+        <div className="max-w-3xl mx-auto text-center space-y-3.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200/80 text-xs font-bold text-[#4A1D96] uppercase tracking-wider shadow-2xs">
             About Wits Lingo
           </div>
-          <h2 className="font-['Outfit'] text-3xl sm:text-4xl font-extrabold text-[#1E1B26] tracking-tight">
+          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-[2.65rem] font-extrabold text-[#1E1B26] tracking-tight leading-tight">
             Language Education Made Practical, Accessible and Engaging
           </h2>
-          <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+          <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
             Wits Lingo is a language-learning platform created to make language education practical, accessible and engaging. We believe that learning a language is not simply about memorising grammar rules or vocabulary. It is about understanding, practising, communicating and developing the confidence to use the language in real life.
           </p>
         </div>
 
         {/* 5-Step Emphasized Flow: Learn → Understand → Practise → Speak → Grow */}
-        <div className="mt-16">
-          <div className="text-center mb-8">
+        <div className="mt-16 sm:mt-20">
+          <div className="text-center mb-10">
             <span className="text-xs font-bold uppercase tracking-widest text-[#581C87]">
               Our Core Learning Framework
             </span>
@@ -76,21 +76,21 @@ export const AboutSection: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {learningSteps.map((item, idx) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4.5">
+            {learningSteps.map((item) => {
               const Icon = item.icon;
               return (
                 <div
                   key={item.title}
-                  className="bg-slate-50/70 hover:bg-purple-50/50 border border-slate-200/70 hover:border-purple-200 rounded-2xl p-5 transition-all duration-200 flex flex-col justify-between group hover:-translate-y-1 hover:shadow-md"
+                  className="bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-purple-200 rounded-2xl p-5.5 transition-all duration-200 flex flex-col justify-between group hover:-translate-y-1 hover:shadow-md hover:shadow-purple-950/5"
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black tracking-widest text-purple-400 font-mono">
                         {item.step}
                       </span>
-                      <div className={`w-8 h-8 rounded-lg ${item.color} flex items-center justify-center transition-transform group-hover:scale-110`}>
-                        <Icon className="w-4 h-4" />
+                      <div className={`w-9 h-9 rounded-xl ${item.color} flex items-center justify-center transition-transform group-hover:scale-105 shadow-2xs`}>
+                        <Icon className="w-4.5 h-4.5" />
                       </div>
                     </div>
                     <h3 className="font-['Outfit'] text-lg font-bold text-[#1E1B26] group-hover:text-[#4A1D96] transition-colors">
@@ -114,3 +114,5 @@ export const AboutSection: React.FC = () => {
     </section>
   );
 };
+
+

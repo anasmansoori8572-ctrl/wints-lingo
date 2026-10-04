@@ -13,6 +13,8 @@ interface NavbarProps {
   onOpenAdmin: () => void;
   onLogout: () => void;
   onOpenSystemReport?: () => void;
+  onNavigateGallery?: () => void;
+  onNavigateHome?: () => void;
   activeSection: string;
 }
 
@@ -25,36 +27,63 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdmin,
   onLogout,
   onOpenSystemReport,
+  onNavigateGallery,
+  onNavigateHome,
   activeSection,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const headerRef = React.useRef<HTMLElement>(null);
   useScrollLock(mobileMenuOpen);
 
+  React.useEffect(() => {
+    const updateHeaderHeight = () => {
+      if (headerRef.current) {
+        const h = headerRef.current.getBoundingClientRect().height;
+        document.documentElement.style.setProperty('--header-height', `${Math.round(h)}px`);
+      }
+    };
+
+    updateHeaderHeight();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && headerRef.current) {
+      observer = new ResizeObserver(updateHeaderHeight);
+      observer.observe(headerRef.current);
+    }
+    window.addEventListener('resize', updateHeaderHeight);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', updateHeaderHeight);
+    };
+  }, [siteSettings?.showAnnouncement, siteSettings?.announcementText]);
+
   const navLinks = [
-    { label: 'Home', href: '#home' },
-    { label: 'Courses', href: '#courses' },
-    ...(siteSettings?.showBatchesSection !== false ? [{ label: 'Batches', href: '#batches' }] : []),
-    { label: 'About', href: '#about' },
-    { label: 'Learning Resources', href: '#learning-resources' },
-    { label: 'Community', href: '#community' },
-    { label: 'Contact', href: '#contact' },
+    { label: 'Home', href: '#home', isGallery: false },
+    { label: 'Courses', href: '#courses', isGallery: false },
+    ...(siteSettings?.showBatchesSection !== false ? [{ label: 'Batches', href: '#batches', isGallery: false }] : []),
+    { label: 'About', href: '#about', isGallery: false },
+    { label: 'Learning Resources', href: '#learning-resources', isGallery: false },
+    { label: 'Gallery', href: '#gallery', isGallery: true },
+    { label: 'Community', href: '#community', isGallery: false },
+    { label: 'Contact', href: '#contact', isGallery: false },
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-purple-100/80 shadow-xs transition-all">
+    <header ref={headerRef} className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all">
       {/* Top micro-announcement banner */}
       {(siteSettings?.showAnnouncement ?? true) && (
-        <div className="bg-gradient-to-r from-[#2E1065] via-[#4A1D96] to-[#3B0764] text-white text-xs py-1.5 px-3 sm:px-4 text-center font-medium flex items-center justify-between gap-2 transition-all w-full overflow-hidden">
+        <div className="bg-gradient-to-r from-[#2E1065] via-[#4A1D96] to-[#3B0764] text-white text-xs py-1.5 px-3 sm:px-4 text-center font-medium flex items-center justify-between gap-2 transition-all w-full overflow-hidden border-b border-purple-900/30">
           <div className="flex items-center gap-2 mx-auto">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <span className="truncate max-w-[70vw] sm:max-w-none text-[11px] sm:text-xs">
+            <span className="truncate max-w-[70vw] sm:max-w-none text-[11px] sm:text-xs tracking-tight font-medium">
               {siteSettings?.announcementText || 'New Batch Starts from 1st of each month • Admissions Open for October & November 2026'}
             </span>
           </div>
           {onOpenSystemReport && (
             <button
               onClick={onOpenSystemReport}
-              className="hidden md:flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold border border-white/20 transition-all cursor-pointer flex-shrink-0"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold border border-white/20 transition-all cursor-pointer flex-shrink-0"
               title="Download Full Website Report & Documentation (PDF)"
             >
               <FileText className="w-3 h-3 text-purple-200" />
@@ -64,10 +93,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18">
           {/* Logo */}
-          <a href="#home" className="min-w-0 cursor-pointer py-1 flex items-center pr-1 sm:pr-0">
+          <a 
+            href="#home" 
+            onClick={(e) => {
+              if (activeSection === 'gallery' && onNavigateHome) {
+                e.preventDefault();
+                onNavigateHome();
+              }
+            }}
+            className="min-w-0 cursor-pointer py-1 flex items-center pr-1 sm:pr-0"
+          >
             {/* Desktop & Tablet: Full logo with tagline */}
             <div className="hidden sm:block">
               <Logo size="md" showTagline={true} />
@@ -79,12 +117,25 @@ export const Navbar: React.FC<NavbarProps> = ({
           </a>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-7">
+          <nav className="hidden lg:flex items-center space-x-1 xl:space-x-2">
             {navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
-                className="text-sm font-semibold text-slate-700 hover:text-[#4A1D96] transition-colors relative py-1"
+                onClick={(e) => {
+                  if (link.isGallery) {
+                    e.preventDefault();
+                    if (onNavigateGallery) onNavigateGallery();
+                    else window.location.hash = '#gallery';
+                  } else if (activeSection === 'gallery' && onNavigateHome) {
+                    onNavigateHome();
+                  }
+                }}
+                className={`text-[13px] font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                  link.isGallery && activeSection === 'gallery'
+                    ? 'text-[#4A1D96] bg-purple-50 font-bold border border-purple-200'
+                    : 'text-slate-700 hover:text-[#4A1D96] hover:bg-purple-50/70'
+                }`}
               >
                 {link.label}
               </a>
@@ -96,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onOpenSystemReport && (
               <button
                 onClick={onOpenSystemReport}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-[#4A1D96] border border-slate-200 hover:border-purple-200 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-[#4A1D96] border border-slate-200 hover:border-purple-200 transition-all cursor-pointer"
                 title="Download full report of the website as PDF"
               >
                 <FileText className="w-3.5 h-3.5 text-purple-700" />
@@ -109,10 +160,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   onClick={onOpenDashboard}
                   id="nav-student-dashboard-btn"
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-purple-50 text-[#4A1D96] hover:bg-purple-100 border border-purple-200 transition-all shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-purple-50 text-[#4A1D96] hover:bg-purple-100 border border-purple-200 transition-all shadow-2xs cursor-pointer"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  My Batch Dashboard
+                  <span>My Batch Dashboard</span>
                 </button>
               </div>
             )}
@@ -121,7 +172,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => onOpenAdmission()}
               id="nav-register-cta-btn"
-              className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-md shadow-purple-900/15 hover:shadow-purple-900/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              className="px-5 py-2.5 rounded-full bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold tracking-wide shadow-sm shadow-purple-900/20 hover:shadow-md hover:shadow-purple-900/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             >
               Register Now
             </button>
@@ -141,7 +192,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
             <button
               onClick={() => onOpenAdmission()}
-              className="sm:hidden px-3 py-1.5 rounded-full bg-[#4A1D96] text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              className="sm:hidden px-3.5 py-1.5 rounded-full bg-[#4A1D96] text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"
             >
               Register
             </button>
@@ -164,8 +215,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <a
                 key={link.label}
                 href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-lg text-base font-medium text-slate-700 hover:bg-purple-50 hover:text-[#4A1D96]"
+                onClick={(e) => {
+                  setMobileMenuOpen(false);
+                  if (link.isGallery) {
+                    e.preventDefault();
+                    if (onNavigateGallery) onNavigateGallery();
+                    else window.location.hash = '#gallery';
+                  } else if (activeSection === 'gallery' && onNavigateHome) {
+                    onNavigateHome();
+                  }
+                }}
+                className={`block px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  link.isGallery && activeSection === 'gallery'
+                    ? 'bg-purple-50 text-[#4A1D96] font-bold'
+                    : 'text-slate-700 hover:bg-purple-50 hover:text-[#4A1D96]'
+                }`}
               >
                 {link.label}
               </a>
@@ -176,7 +240,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onOpenSystemReport();
                   setMobileMenuOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 rounded-lg text-base font-semibold text-purple-900 bg-purple-50/70 hover:bg-purple-100 flex items-center justify-between"
+                className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold text-purple-900 bg-purple-50/70 hover:bg-purple-100 flex items-center justify-between transition-colors"
               >
                 <span className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-purple-700" />
@@ -193,9 +257,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onOpenAdmission();
                 setMobileMenuOpen(false);
               }}
-              className="w-full py-3 rounded-xl bg-[#4A1D96] text-white text-sm font-bold shadow-md shadow-purple-900/20 flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-sm font-bold shadow-md shadow-purple-900/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
-              Register Now — Admission Form
+              <span>Register Now — Admission Form</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

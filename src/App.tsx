@@ -23,12 +23,13 @@ import { AdmissionModal } from './components/AdmissionModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdminPanel } from './components/AdminPanel';
+import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
 
 export default function App() {
-  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel'
-  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel'>('home');
+  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery'
+  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery'>('home');
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -178,6 +179,25 @@ export default function App() {
         }
       })
       .catch(err => console.warn('Could not load materials in App:', err));
+
+    // Handle URL path / hash navigation for /gallery, /admin, #gallery
+    const handleUrlChange = () => {
+      const hash = (window.location.hash || '').toLowerCase();
+      const path = (window.location.pathname || '').toLowerCase();
+      if (hash === '#gallery' || path === '/gallery' || path.startsWith('/gallery')) {
+        setCurrentView('gallery');
+      } else if (hash === '#home' || path === '/') {
+        if (currentView === 'gallery') setCurrentView('home');
+      }
+    };
+
+    handleUrlChange();
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
   }, []);
 
   // Handle Login Success
@@ -249,6 +269,14 @@ export default function App() {
         }}
         onLogout={handleLogout}
         onOpenSystemReport={() => setIsSystemReportOpen(true)}
+        onNavigateGallery={() => {
+          try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
+          setCurrentView('gallery');
+        }}
+        onNavigateHome={() => {
+          try { window.history.pushState(null, '', '/'); } catch (e) {}
+          setCurrentView('home');
+        }}
         activeSection={currentView}
       />
 
@@ -258,14 +286,20 @@ export default function App() {
           currentUser={currentUser}
           token={authToken}
           onLogout={handleLogout}
-          onBackToHome={() => setCurrentView('home')}
+          onBackToHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+          }}
         />
       ) : currentView === 'admin-panel' && currentUser && currentUser.role === 'admin' && authToken ? (
         <AdminPanel
           currentUser={currentUser}
           token={authToken}
           onLogout={handleLogout}
-          onBackToHome={() => setCurrentView('home')}
+          onBackToHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+          }}
           onOpenSystemReport={() => setIsSystemReportOpen(true)}
           courses={courses}
           onUpdateCourses={handleUpdateCourses}
@@ -279,6 +313,15 @@ export default function App() {
           onUpdateAnnouncements={handleUpdateAnnouncements}
           materials={materials}
           onUpdateMaterials={handleUpdateMaterials}
+        />
+      ) : currentView === 'gallery' ? (
+        <GalleryPage
+          onBackToHome={() => {
+            try { window.history.pushState(null, '', '/'); } catch (e) {}
+            setCurrentView('home');
+          }}
+          onOpenAdmission={(cId, bId) => handleOpenAdmission(cId, bId)}
+          siteSettings={siteSettings}
         />
       ) : (
         /* MAIN HOMEPAGE */
@@ -362,6 +405,10 @@ export default function App() {
           }
         }}
         onOpenSystemReport={() => setIsSystemReportOpen(true)}
+        onNavigateGallery={() => {
+          try { window.history.pushState(null, '', '/gallery'); } catch (e) {}
+          setCurrentView('gallery');
+        }}
         siteSettings={siteSettings}
       />
 

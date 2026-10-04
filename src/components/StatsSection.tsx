@@ -35,42 +35,42 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
   ];
 
   return (
-    <section className="py-16 bg-[#F8F6FC] border-b border-purple-100/70">
+    <section className="py-18 sm:py-22 bg-[#FAF9FD] border-b border-slate-200/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Heading */}
-        <div className="text-center max-w-2xl mx-auto mb-12 space-y-2">
+        <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-14 space-y-2.5">
           <span className="text-xs font-bold uppercase tracking-widest text-[#581C87]">
             Our Journey & Accomplishments
           </span>
-          <h2 className="font-['Outfit'] text-2xl sm:text-3xl font-extrabold text-[#1E1B26]">
+          <h2 className="font-['Outfit'] text-2xl sm:text-3.5xl font-extrabold text-[#1E1B26] tracking-tight">
             Real Milestones, Genuine Impact
           </h2>
         </div>
 
         {/* 4 Clean Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, idx) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+          {stats.map((stat) => {
             const Icon = stat.icon;
             return (
               <div
                 key={stat.label}
-                className="bg-white rounded-2xl p-6 border border-purple-100/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:shadow-md hover:border-purple-200 transition-all duration-200 flex flex-col justify-between group hover:-translate-y-0.5"
               >
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#4A1D96] flex items-center justify-center border border-purple-100">
+                <div className="space-y-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#4A1D96] flex items-center justify-center border border-purple-100 shadow-2xs group-hover:scale-105 transition-transform">
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="font-['Outfit'] font-extrabold text-3xl sm:text-4xl text-[#3B0764] tracking-tight block">
+                    <span className="font-['Outfit'] font-extrabold text-3xl sm:text-3.5xl text-[#3B0764] tracking-tight block">
                       {stat.metric}
                     </span>
-                    <h3 className="font-bold text-sm text-slate-800 mt-1">
+                    <h3 className="font-bold text-sm text-slate-800 mt-1 leading-snug">
                       {stat.label}
                     </h3>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5">
+                <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                   <span>{stat.subtext}</span>
                 </p>
@@ -80,11 +80,11 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
         </div>
 
         {/* Short Statement with clean styling */}
-        <div className="mt-12 max-w-3xl mx-auto text-center bg-white/80 border border-purple-200/70 rounded-2xl p-6 sm:p-8 shadow-xs">
+        <div className="mt-12 max-w-3xl mx-auto text-center bg-white border border-purple-100/90 rounded-2xl p-6 sm:p-8 shadow-xs">
           <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-medium">
             “Our journey has already helped learners improve their English from the beginning level towards advanced communication. Now, Wits Lingo is returning with renewed energy, fresh ideas and new opportunities.”
           </p>
-          <div className="mt-3 flex items-center justify-center gap-2 text-xs font-bold text-[#4A1D96]">
+          <div className="mt-3.5 flex items-center justify-center gap-2 text-xs font-bold text-[#4A1D96]">
             <span>Wits Lingo Academy</span>
             <span className="text-slate-300">•</span>
             <span className="text-slate-500 font-normal">Dhakka, Amroha, Uttar Pradesh</span>

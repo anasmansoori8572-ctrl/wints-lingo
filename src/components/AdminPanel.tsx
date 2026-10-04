@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { User, Batch, ClassSession, Recording, StudyMaterial, CourseData, TestimonialData, SiteSettings, Announcement } from '../types';
+import { User, Batch, ClassSession, Recording, StudyMaterial, CourseData, TestimonialData, SiteSettings, Announcement, GalleryItem } from '../types';
 import { 
   Users, Layers, Video, Play, FileText, Settings, Plus, Trash2, 
   Edit3, CheckCircle2, Download, Search, ShieldCheck, LogOut, 
   ExternalLink, Filter, ArrowLeft, Save, Globe, MessageSquare, 
   X, Check, AlertTriangle, Phone, Mail, MapPin, Eye, EyeOff, RefreshCw,
   Megaphone, Pin, Clock, Calendar, Tag, Lock, Sparkles, Link as LinkIcon, BookOpen, Bell,
-  Landmark, CreditCard
+  Landmark, CreditCard, Cloud, Film, UploadCloud, Copy, PlayCircle,
+  Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus
 } from 'lucide-react';
 import { AnnouncementModal } from './AnnouncementModal';
 import { ProtectedPdfViewer } from './ProtectedPdfViewer';
@@ -56,7 +57,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   materials: externalMaterials = [],
   onUpdateMaterials
 }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'testimonials' | 'announcements' | 'settings'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>('students');
   
   // Data states
   const [students, setStudents] = useState<any[]>([]);
@@ -64,6 +65,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [searchStudent, setSearchStudent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Gallery Management States
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [gallerySearchQuery, setGallerySearchQuery] = useState('');
+  const [galleryCategoryFilter, setGalleryCategoryFilter] = useState('all');
+  const [galleryPublishFilter, setGalleryPublishFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [showAddGalleryModal, setShowAddGalleryModal] = useState(false);
+  const [editingGalleryItem, setEditingGalleryItem] = useState<GalleryItem | null>(null);
+  const [previewGalleryItem, setPreviewGalleryItem] = useState<GalleryItem | null>(null);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<Array<{ file: File; preview: string; title: string; caption: string; category: string }>>([]);
+
+  // Hero Video Control States
+  const [customHeroVideoUrl, setCustomHeroVideoUrl] = useState<string>(siteSettings.heroVideoUrl || '');
+  const [simulatedHeroOverlay, setSimulatedHeroOverlay] = useState<boolean>(true);
+  const [selectedHeroFile, setSelectedHeroFile] = useState<File | null>(null);
+  const [copiedHeroUrl, setCopiedHeroUrl] = useState<boolean>(false);
 
   // Class, Recording, Material state
   const [classes, setClasses] = useState<ClassSession[]>([]);
@@ -117,6 +136,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     onConfirm: () => Promise<void> | void;
   } | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const [isUploadingHeroVideo, setIsUploadingHeroVideo] = useState(false);
 
   // Announcements & Holiday Notices state
   const [localAnnouncements, setLocalAnnouncements] = useState<Announcement[]>(announcements || []);
@@ -162,6 +182,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showAddAnnouncementModal ||
     editingAnnouncement ||
     previewingAnnouncement ||
+    showAddGalleryModal ||
+    editingGalleryItem ||
+    previewGalleryItem ||
     deleteModal
   );
   useScrollLock(isAnyAdminModalOpen);
@@ -223,7 +246,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     enrolledCount: 0,
     status: 'Upcoming',
     teacherName: 'Ziyaur Rehman Zia',
-    isVisibleOnWebsite: true
+    isVisibleOnWebsite: true,
+    googleMeetLink: ''
   });
 
   const [newClass, setNewClass] = useState({
@@ -254,7 +278,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     fileSize: '1.8 MB',
     downloadUrl: '',
     pdfUrl: '',
+    b2FileId: '',
+    b2FileName: '',
+    mimeType: 'application/pdf',
     isViewOnly: true,
+    allowDownload: false,
     category: 'Worksheets',
     level: 'All Levels',
     isVisibleOnWebsite: true
@@ -326,6 +354,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         try {
           localStorage.setItem('wits_lingo_materials', JSON.stringify(loaded));
         } catch (e) {}
+      }
+
+      // 5. Gallery Items
+      const gRes = await fetch('/api/admin/gallery', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.success && Array.isArray(gData.items)) {
+          setGalleryItems(gData.items);
+        }
       }
     } catch (err) {
       console.error('Failed to load admin data', err);
@@ -569,7 +608,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       enrolledCount: 0,
       status: newBatch.status || 'Upcoming',
       teacherName: newBatch.teacherName || 'Ziyaur Rehman Zia',
-      isVisibleOnWebsite: newBatch.isVisibleOnWebsite !== false
+      isVisibleOnWebsite: newBatch.isVisibleOnWebsite !== false,
+      googleMeetLink: newBatch.googleMeetLink || ''
     };
 
     try {
@@ -597,7 +637,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       enrolledCount: 0,
       status: 'Upcoming',
       teacherName: 'Ziyaur Rehman Zia',
-      isVisibleOnWebsite: true
+      isVisibleOnWebsite: true,
+      googleMeetLink: ''
     });
     triggerFeedback(`Batch "${batchToAdd.name}" created.`);
   };
@@ -815,19 +856,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const opt = optimizePdfUrl(newMaterial.pdfUrl);
+    const newId = `mat-${Date.now()}`;
     const mat: StudyMaterial = {
-      id: `mat-${Date.now()}`,
+      id: newId,
       batchId: newMaterial.batchId || 'all',
       title: newMaterial.title,
       description: newMaterial.description,
       fileType: (newMaterial.fileType as 'pdf' | 'doc' | 'notes') || 'pdf',
       fileSize: newMaterial.fileSize || '2.1 MB',
-      downloadUrl: '#',
+      downloadUrl: (newMaterial.downloadUrl && newMaterial.downloadUrl !== '#') ? newMaterial.downloadUrl : `/api/files/download/${newId}`,
       pdfUrl: opt.embedUrl || newMaterial.pdfUrl,
+      b2FileId: newMaterial.b2FileId || undefined,
+      b2FileName: newMaterial.b2FileName || undefined,
+      mimeType: newMaterial.mimeType || 'application/pdf',
       isViewOnly: newMaterial.isViewOnly !== false,
-      allowDownload: false,
-      uploadedAt: new Date().toLocaleDateString('en-GB'),
-      uploadedDate: new Date().toLocaleDateString('en-GB'),
+      allowDownload: Boolean(newMaterial.allowDownload),
+      uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       category: newMaterial.category || 'Worksheets',
       level: newMaterial.level || 'All Levels',
       isVisibleOnWebsite: newMaterial.isVisibleOnWebsite !== false
@@ -867,7 +912,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       fileSize: '1.8 MB',
       downloadUrl: '',
       pdfUrl: '',
+      b2FileId: '',
+      b2FileName: '',
+      mimeType: 'application/pdf',
       isViewOnly: true,
+      allowDownload: false,
       category: 'Worksheets',
       level: 'All Levels',
       isVisibleOnWebsite: true
@@ -882,8 +931,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const updated: StudyMaterial = {
       ...editingMaterial,
       pdfUrl: opt.embedUrl || editingMaterial.pdfUrl,
+      downloadUrl: (editingMaterial.downloadUrl && editingMaterial.downloadUrl !== '#') ? editingMaterial.downloadUrl : `/api/files/download/${editingMaterial.id}`,
       isViewOnly: editingMaterial.isViewOnly !== false,
-      allowDownload: false,
+      allowDownload: Boolean(editingMaterial.allowDownload),
       category: editingMaterial.category || 'Worksheets',
       level: editingMaterial.level || 'All Levels',
       isVisibleOnWebsite: editingMaterial.isVisibleOnWebsite !== false
@@ -1116,8 +1166,281 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // ----------------------------------------------------------------------
-  // 8. SITE SETTINGS & CMS SAVE
+  // 8. SITE SETTINGS & HERO VIDEO MANAGEMENT
   // ----------------------------------------------------------------------
+  const handleUploadHeroVideo = async (file: File) => {
+    if (!file) return;
+    setIsUploadingHeroVideo(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = reader.result as string;
+          const res = await fetch('/api/admin/hero-video/upload', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              filename: file.name,
+              dataBase64: base64Data,
+              mimeType: file.type || 'video/mp4'
+            })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.success) {
+            const updated = {
+              ...localSettings,
+              heroVideoUrl: data.heroVideoUrl
+            };
+            setLocalSettings(updated);
+            onUpdateSiteSettings(updated);
+            triggerFeedback(data.uploadedToB2 
+              ? 'Hero video uploaded directly to Backblaze B2 and updated live!' 
+              : 'Hero video updated live on website (Local storage fallback)!'
+            );
+          } else {
+            triggerFeedback(data.error || 'Failed to upload hero video.');
+          }
+        } catch (err: any) {
+          triggerFeedback(err?.message || 'Error processing video file.');
+        } finally {
+          setIsUploadingHeroVideo(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      triggerFeedback('Could not read video file.');
+      setIsUploadingHeroVideo(false);
+    }
+  };
+
+  const handleResetHeroVideo = async () => {
+    try {
+      const res = await fetch('/api/admin/hero-video/reset', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const updated = {
+          ...localSettings,
+          heroVideoUrl: '/video/wits-lingo-intro.mp4'
+        };
+        setLocalSettings(updated);
+        setCustomHeroVideoUrl('/video/wits-lingo-intro.mp4');
+        onUpdateSiteSettings(updated);
+        triggerFeedback('Hero video reset to default academy introduction video.');
+      }
+    } catch (err) {
+      triggerFeedback('Error resetting hero video.');
+    }
+  };
+
+  const handlePublishHeroVideoUrl = async (customUrl: string) => {
+    const urlToSet = customUrl.trim() || '/video/wits-lingo-intro.mp4';
+    const updated = {
+      ...localSettings,
+      heroVideoUrl: urlToSet
+    };
+    setLocalSettings(updated);
+    setCustomHeroVideoUrl(urlToSet);
+    onUpdateSiteSettings(updated);
+    try {
+      await fetch('/api/cms/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          phoneNumbers: [localSettings.phone1, localSettings.phone2],
+          email: localSettings.email,
+          location: localSettings.address,
+          announcementText: localSettings.announcementText,
+          announcementBtnText: localSettings.announcementBtnText || '',
+          showAnnouncement: localSettings.showAnnouncement,
+          settings: updated
+        })
+      });
+    } catch (e) {}
+    triggerFeedback('Hero video URL published and active on homepage!');
+  };
+
+  // ----------------------------------------------------------------------
+  // 9. GALLERY MANAGEMENT HANDLERS (BACKBLAZE B2 STORAGE)
+  // ----------------------------------------------------------------------
+  const handleUploadGalleryFiles = async (filesToUpload: Array<{ file: File; title: string; caption: string; category: string }>) => {
+    if (!filesToUpload || filesToUpload.length === 0) return;
+    setIsUploadingGallery(true);
+    try {
+      const imagePayloads: Array<{
+        dataBase64: string;
+        filename: string;
+        mimeType: string;
+        title: string;
+        caption: string;
+        category: string;
+        isPublished: boolean;
+      }> = [];
+
+      for (const item of filesToUpload) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(item.file);
+        });
+
+        imagePayloads.push({
+          dataBase64: base64,
+          filename: item.file.name,
+          mimeType: item.file.type || 'image/jpeg',
+          title: item.title,
+          caption: item.caption,
+          category: item.category || 'Classrooms',
+          isPublished: true
+        });
+      }
+
+      const res = await fetch('/api/admin/gallery/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ images: imagePayloads })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (Array.isArray(data.items)) {
+          setGalleryItems(prev => [...data.items, ...prev]);
+        } else {
+          const gRes = await fetch('/api/admin/gallery', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            if (Array.isArray(gData.items)) setGalleryItems(gData.items);
+          }
+        }
+        setShowAddGalleryModal(false);
+        setSelectedUploadFiles([]);
+        triggerFeedback(`Successfully uploaded ${filesToUpload.length} image(s) to Backblaze B2 & Gallery!`);
+      } else {
+        triggerFeedback(data.error || 'Failed to upload gallery images.');
+      }
+    } catch (err: any) {
+      console.error('Gallery upload error:', err);
+      triggerFeedback(err?.message || 'Error uploading gallery photos.');
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleUpdateGalleryMetadata = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGalleryItem) return;
+    try {
+      const res = await fetch(`/api/admin/gallery/${editingGalleryItem.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: editingGalleryItem.title,
+          caption: editingGalleryItem.caption,
+          category: editingGalleryItem.category,
+          isPublished: editingGalleryItem.isPublished,
+          displayOrder: editingGalleryItem.displayOrder
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGalleryItems(prev => prev.map(item => item.id === editingGalleryItem.id ? data.item : item));
+        setEditingGalleryItem(null);
+        triggerFeedback('Gallery photo details updated successfully.');
+      } else {
+        triggerFeedback(data.error || 'Failed to update photo.');
+      }
+    } catch (err) {
+      triggerFeedback('Error updating photo metadata.');
+    }
+  };
+
+  const handleToggleGalleryPublish = async (item: GalleryItem) => {
+    const nextStatus = !item.isPublished;
+    try {
+      const res = await fetch(`/api/admin/gallery/${item.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isPublished: nextStatus })
+      });
+      if (res.ok) {
+        setGalleryItems(prev => prev.map(g => g.id === item.id ? { ...g, isPublished: nextStatus } : g));
+        triggerFeedback(nextStatus ? `Photo published live to public /gallery.` : `Photo changed to Draft (Unpublished).`);
+      }
+    } catch (err) {
+      triggerFeedback('Error updating publish status.');
+    }
+  };
+
+  const handleDeleteGalleryPhoto = (item: GalleryItem) => {
+    setDeleteModal({
+      isOpen: true,
+      title: 'Delete Gallery Image',
+      itemName: item.title || 'Untitled Photo',
+      itemType: 'gallery photograph',
+      description: `Are you sure you want to delete this photo from the gallery? It will be removed from the public website and safely erased from cloud storage.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/gallery/${item.id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            setGalleryItems(prev => prev.filter(g => g.id !== item.id));
+            triggerFeedback('Gallery photo deleted successfully.');
+          } else {
+            triggerFeedback('Failed to delete photo.');
+          }
+        } catch (err) {
+          triggerFeedback('Error deleting photo.');
+        }
+      }
+    });
+  };
+
+  const handleMoveGalleryOrder = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= galleryItems.length) return;
+
+    const reordered = [...galleryItems];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const updated = reordered.map((item, idx) => ({ ...item, displayOrder: idx + 1 }));
+    setGalleryItems(updated);
+
+    try {
+      await fetch('/api/admin/gallery/reorder', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ orderedIds: updated.map(i => i.id) })
+      });
+      triggerFeedback('Gallery display order updated.');
+    } catch (e) {
+      console.warn('Could not persist gallery order:', e);
+    }
+  };
+
   const handleSaveSiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSiteSettings(localSettings);
@@ -1218,6 +1541,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             { id: 'classes', label: 'Live Classes Scheduler', icon: Video },
             { id: 'recordings', label: 'Class Recordings', icon: Play },
             { id: 'materials', label: 'Study Notes & PDFs', icon: FileText },
+            { id: 'hero-video', label: 'Hero Video', icon: Film },
+            { id: 'gallery', label: `Gallery (${galleryItems.length})`, icon: ImageIcon },
             { id: 'testimonials', label: `Student Reviews (${testimonials.length})`, icon: MessageSquare },
             { id: 'announcements', label: `Notices & Holidays (${localAnnouncements.length})`, icon: Megaphone },
             { id: 'settings', label: 'Website CMS & Settings', icon: Settings }
@@ -1992,6 +2317,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <p>
                               <strong>Mentor:</strong> {batch.teacherName || 'Ziyaur Rehman Zia'}
                             </p>
+                            {batch.googleMeetLink && (
+                              <div className="pt-1 flex items-center justify-between bg-purple-50/70 px-2.5 py-1.5 rounded-lg border border-purple-200 text-[11px]">
+                                <span className="text-purple-900 font-semibold truncate flex items-center gap-1">
+                                  <Video className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                                  <span className="truncate">Google Meet Link Configured</span>
+                                </span>
+                                <a
+                                  href={batch.googleMeetLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-0.5 shrink-0 ml-1"
+                                >
+                                  <span>Open</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            )}
                           </div>
 
                           {/* Capacity Bar */}
@@ -2309,14 +2651,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
                           </div>
 
-                          {/* Security & Link Status Badges */}
+                          {/* Security, Storage & Link Status Badges */}
                           <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1">
-                              <Lock className="w-2.5 h-2.5" />
-                              <span>View-Only (No Download)</span>
-                            </span>
+                            {mat.allowDownload ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1">
+                                <Download className="w-2.5 h-2.5" />
+                                <span>Download Allowed</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-bold flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>View-Only (Protected)</span>
+                              </span>
+                            )}
 
-                            {mat.pdfUrl ? (
+                            {(mat.b2FileId || mat.b2FileName || mat.pdfUrl?.includes('backblazeb2.com') || mat.pdfUrl?.includes('/api/files/pdf/')) ? (
+                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
+                                <Cloud className="w-2.5 h-2.5 text-indigo-600" />
+                                <span>Backblaze B2</span>
+                              </span>
+                            ) : mat.pdfUrl ? (
                               <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium flex items-center gap-1 truncate max-w-[180px]">
                                 <LinkIcon className="w-2.5 h-2.5 flex-shrink-0" />
                                 <span className="truncate">{opt.provider === 'Google Drive' ? 'Google Drive Embed' : (opt.provider === 'Direct PDF' ? 'Direct PDF' : opt.provider)}</span>
@@ -2325,6 +2679,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex items-center gap-1">
                                 <BookOpen className="w-2.5 h-2.5" />
                                 <span>Digital Curriculum Guide</span>
+                              </span>
+                            )}
+
+                            {mat.isVisibleOnWebsite !== false ? (
+                              <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 font-medium text-[9px]">
+                                Public on Website
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium text-[9px]">
+                                Batch Only
                               </span>
                             )}
                           </div>
@@ -2375,6 +2739,621 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         )}
+
+        {/* ==================================================================== */}
+        {/* TAB: HOMEPAGE HERO VIDEO MANAGEMENT (BACKBLAZE B2 & CDN) */}
+        {/* ==================================================================== */}
+        {activeTab === 'hero-video' && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-8">
+            {/* Section Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#3B0764] to-[#4A1D96] text-white flex items-center justify-center shadow-xs">
+                    <Film className="w-4 h-4" />
+                  </div>
+                  <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                    Hero Video Management
+                  </h2>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live on Homepage
+                  </span>
+                  <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                    Backblaze B2 & CDN
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Manage, preview, upload, and publish the full-bleed video playing in the main WITS LINGO homepage Hero background.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleResetHeroVideo}
+                  id="hero-video-reset-btn"
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Reset hero video to original academy intro video"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Reset to Default Video</span>
+                </button>
+
+                {onBackToHome && (
+                  <button
+                    type="button"
+                    onClick={onBackToHome}
+                    id="hero-video-view-live-btn"
+                    className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] text-xs font-bold flex items-center gap-1.5 transition-colors border border-purple-200 cursor-pointer"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>View on Live Homepage</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Main 2-Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Left Column: Live Video Player & Overlay Simulation */}
+              <div className="lg:col-span-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <PlayCircle className="w-4 h-4 text-[#4A1D96]" />
+                    <span>Current Active Video Preview</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSimulatedHeroOverlay(!simulatedHeroOverlay)}
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      simulatedHeroOverlay 
+                        ? 'bg-purple-900 text-white border-purple-900' 
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                    title="Toggle dark cinematic overlay and text preview"
+                  >
+                    <Sparkles className="w-3 h-3 text-purple-300" />
+                    <span>{simulatedHeroOverlay ? 'Overlay Simulation: ON' : 'Overlay Simulation: OFF'}</span>
+                  </button>
+                </div>
+
+                {/* Video Container */}
+                <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-black border-2 border-purple-200 shadow-md">
+                  <video
+                    key={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                    src={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                    poster={localSettings.heroVideoPosterUrl || '/video/wits-lingo-poster.jpg'}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    controls
+                    className="w-full h-full object-cover"
+                  />
+
+                  {/* Simulated Cinematic Overlay */}
+                  {simulatedHeroOverlay && (
+                    <div 
+                      className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6"
+                      style={{ backgroundColor: 'rgba(26, 10, 52, 0.45)' }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white uppercase tracking-wider">
+                          Live Homepage Overlay Preview
+                        </span>
+                        <span className="text-[10px] text-purple-200 font-semibold">
+                          Uniform Tint 45%
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 max-w-xs">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2E1065]/80 text-[9px] font-bold text-purple-200 uppercase">
+                          {localSettings.academyName || 'WITS LINGO'}
+                        </div>
+                        <h4 className="text-white text-sm font-extrabold leading-tight">
+                          Speak English with Confidence & Fluency
+                        </h4>
+                        <p className="text-purple-100/80 text-[10px] line-clamp-2">
+                          Interactive Live Online Classes with Expert Mentors across India.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video Info Pill */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Current Stream Source:</span>
+                    <span className="font-bold text-slate-800 flex items-center gap-1">
+                      {(localSettings.heroVideoUrl || '').includes('backblazeb2.com') || (localSettings.heroVideoUrl || '').startsWith('/api/files/') ? (
+                        <span className="text-purple-700 flex items-center gap-1">
+                          <Cloud className="w-3.5 h-3.5" /> Backblaze B2 Cloud
+                        </span>
+                      ) : (
+                        <span className="text-slate-700">Default Academy Asset</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                      className="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-mono text-slate-700 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4');
+                        setCopiedHeroUrl(true);
+                        setTimeout(() => setCopiedHeroUrl(false), 2000);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer flex-shrink-0"
+                      title="Copy URL to clipboard"
+                    >
+                      {copiedHeroUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedHeroUrl ? 'Copied!' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Upload New Video / Replace / Publish Custom URL */}
+              <div className="lg:col-span-6 space-y-6">
+                
+                {/* Method 1: Upload Video File to Backblaze B2 */}
+                <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-50/60 via-white to-white border-2 border-purple-200/80 space-y-4 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-[#4A1D96] text-white flex items-center justify-center">
+                      <UploadCloud className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Upload & Replace Video (Backblaze B2)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Upload a video file from your computer directly to your Backblaze B2 Cloud bucket.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Drag & Drop File Zone */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        const file = e.dataTransfer.files[0];
+                        if (file.type.startsWith('video/')) {
+                          setSelectedHeroFile(file);
+                        } else {
+                          triggerFeedback('Please select a valid video file (MP4, WebM, MOV).');
+                        }
+                      }
+                    }}
+                    className="border-2 border-dashed border-purple-200 hover:border-purple-400 bg-purple-50/30 hover:bg-purple-50/60 rounded-2xl p-6 text-center transition-all cursor-pointer relative"
+                  >
+                    <input
+                      type="file"
+                      id="hero-video-file-input"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      disabled={isUploadingHeroVideo}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setSelectedHeroFile(e.target.files[0]);
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+
+                    <div className="space-y-2 pointer-events-none">
+                      <div className="w-10 h-10 rounded-2xl bg-white border border-purple-200 text-[#4A1D96] flex items-center justify-center mx-auto shadow-2xs">
+                        <Film className="w-5 h-5" />
+                      </div>
+                      <div className="text-xs font-bold text-slate-800">
+                        {selectedHeroFile ? (
+                          <span className="text-purple-900 font-extrabold">{selectedHeroFile.name} ({(selectedHeroFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                        ) : (
+                          <span>Click to browse or drag & drop video file here</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Supported: <strong className="text-slate-700">MP4, WebM, MOV</strong> (1080p / 720p recommended)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Upload Action Button */}
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <button
+                      type="button"
+                      disabled={!selectedHeroFile || isUploadingHeroVideo}
+                      onClick={() => {
+                        if (selectedHeroFile) {
+                          handleUploadHeroVideo(selectedHeroFile);
+                        }
+                      }}
+                      id="hero-video-upload-btn"
+                      className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer ${
+                        !selectedHeroFile || isUploadingHeroVideo
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                          : 'bg-[#4A1D96] hover:bg-[#3B0764] text-white shadow-purple-900/20 active:scale-98'
+                      }`}
+                    >
+                      {isUploadingHeroVideo ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Uploading Video to Backblaze B2...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-4 h-4" />
+                          <span>Upload & Set Live on Homepage</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Method 2: Set Custom Video URL / CDN Link */}
+                <div className="p-6 rounded-3xl bg-white border border-slate-200 space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-purple-100 text-[#4A1D96] flex items-center justify-center">
+                      <LinkIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Publish Direct Video URL / CDN Link
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Provide a direct Backblaze B2 public link, Cloudflare CDN, or custom host URL.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        Video Stream URL:
+                      </label>
+                      <input
+                        type="text"
+                        value={customHeroVideoUrl}
+                        onChange={(e) => setCustomHeroVideoUrl(e.target.value)}
+                        placeholder="e.g. https://f005.backblazeb2.com/file/my-bucket/intro.mp4"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-[#4A1D96] bg-slate-50 focus:bg-white text-xs font-mono text-slate-900 focus:outline-none transition-all"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePublishHeroVideoUrl(customHeroVideoUrl)}
+                      id="hero-video-publish-url-btn"
+                      className="w-full py-2.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Publish & Set Active</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Video Optimization Best Practices Info */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/70 text-[11px] text-amber-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Best Practices for Homepage Video:</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-800/90 pl-1">
+                    <li>Recommended format: <strong>H.264 MP4</strong> (universally supported on iPhone/Android/Desktop).</li>
+                    <li>Ideal resolution: <strong>1080p (1920x1080)</strong> or <strong>720p (1280x720)</strong>.</li>
+                    <li>Audio is automatically muted in background so modern browsers autoplay smoothly without user interaction.</li>
+                  </ul>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* TAB: GALLERY & MEDIA MANAGEMENT (BACKBLAZE B2 STORAGE) */}
+        {/* ==================================================================== */}
+        {activeTab === 'gallery' && (() => {
+          const filteredGallery = galleryItems.filter(item => {
+            const matchesQuery = !gallerySearchQuery.trim() || 
+              (item.title || '').toLowerCase().includes(gallerySearchQuery.toLowerCase()) ||
+              (item.caption || '').toLowerCase().includes(gallerySearchQuery.toLowerCase()) ||
+              (item.category || '').toLowerCase().includes(gallerySearchQuery.toLowerCase());
+            
+            const matchesCat = galleryCategoryFilter === 'all' || (item.category || '').toLowerCase() === galleryCategoryFilter.toLowerCase();
+            
+            const matchesPublish = galleryPublishFilter === 'all' || 
+              (galleryPublishFilter === 'published' && item.isPublished) ||
+              (galleryPublishFilter === 'draft' && !item.isPublished);
+
+            return matchesQuery && matchesCat && matchesPublish;
+          });
+
+          const allCategories = ['Classrooms', 'Live Sessions', 'Events & Workshops', 'Student Activities', 'Community', 'General'];
+          const publishedCount = galleryItems.filter(i => i.isPublished).length;
+          const draftCount = galleryItems.filter(i => !i.isPublished).length;
+
+          return (
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#3B0764] to-[#4A1D96] text-white flex items-center justify-center shadow-xs">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                    <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                      Gallery & Media Management
+                    </h2>
+                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                      Backblaze B2 Synced
+                    </span>
+                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {publishedCount} Live on /gallery
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Upload, organize, edit metadata, and publish classroom moments and student activities to the public website gallery.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setSelectedUploadFiles([]);
+                      setShowAddGalleryModal(true);
+                    }}
+                    id="admin-add-gallery-btn"
+                    className="px-4 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-2 transition-all shadow-sm shadow-purple-900/20 active:scale-98 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Upload New Photos (B2)</span>
+                  </button>
+
+                  {onBackToHome && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.hash = '#gallery';
+                        window.location.reload();
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-[#4A1D96] text-xs font-bold flex items-center gap-1.5 transition-colors border border-purple-200 cursor-pointer"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>View Public Gallery</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 block">Total Photos</span>
+                  <span className="text-xl font-extrabold text-[#4A1D96] font-['Outfit']">{galleryItems.length}</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-1">
+                  <span className="text-[11px] font-semibold text-emerald-700 block">Published Live</span>
+                  <span className="text-xl font-extrabold text-emerald-800 font-['Outfit']">{publishedCount}</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 block">Draft / Hidden</span>
+                  <span className="text-xl font-extrabold text-slate-700 font-['Outfit']">{draftCount}</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100 space-y-1">
+                  <span className="text-[11px] font-semibold text-amber-700 block">Categories</span>
+                  <span className="text-xl font-extrabold text-amber-800 font-['Outfit']">{allCategories.length}</span>
+                </div>
+              </div>
+
+              {/* Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Category:</span>
+                    <select
+                      value={galleryCategoryFilter}
+                      onChange={(e) => setGalleryCategoryFilter(e.target.value)}
+                      className="bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                    >
+                      <option value="all">All Categories</option>
+                      {allCategories.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+                    <span>Status:</span>
+                    <select
+                      value={galleryPublishFilter}
+                      onChange={(e) => setGalleryPublishFilter(e.target.value as any)}
+                      className="bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="published">Published Only</option>
+                      <option value="draft">Drafts Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search moments by title, caption..."
+                    value={gallerySearchQuery}
+                    onChange={(e) => setGallerySearchQuery(e.target.value)}
+                    className="w-full sm:w-64 pl-8.5 pr-3 py-1.5 text-xs rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-[#4A1D96]"
+                  />
+                </div>
+              </div>
+
+              {/* Gallery Items Grid */}
+              {filteredGallery.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                  {filteredGallery.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-3xl border overflow-hidden flex flex-col justify-between transition-all bg-white shadow-2xs hover:shadow-md ${
+                        item.isPublished ? 'border-purple-200/90' : 'border-slate-300 opacity-80'
+                      }`}
+                    >
+                      {/* Image Frame */}
+                      <div className="relative aspect-4/3 overflow-hidden bg-slate-900 group">
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title || 'Gallery item'}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+
+                        {/* Order & Category Badges */}
+                        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+                          <span className="px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-xs text-[10px] font-bold text-white">
+                            #{item.displayOrder || (index + 1)}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-lg bg-[#4A1D96]/80 backdrop-blur-xs text-[10px] font-bold text-white uppercase">
+                            {item.category || 'Classrooms'}
+                          </span>
+                        </div>
+
+                        {/* Publish Status Badge */}
+                        <div className="absolute top-2.5 right-2.5 z-10">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleGalleryPublish(item)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase transition-all shadow-xs cursor-pointer ${
+                              item.isPublished
+                                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                : 'bg-slate-700 text-slate-200 hover:bg-slate-800'
+                            }`}
+                            title="Click to toggle publish / draft"
+                          >
+                            {item.isPublished ? 'Live' : 'Draft'}
+                          </button>
+                        </div>
+
+                        {/* Hover Quick Preview Button */}
+                        <div 
+                          onClick={() => setPreviewGalleryItem(item)}
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                        >
+                          <div className="px-3 py-1.5 rounded-xl bg-white/90 text-slate-900 text-xs font-bold flex items-center gap-1.5 shadow-md">
+                            <Eye className="w-3.5 h-3.5 text-[#4A1D96]" />
+                            <span>Preview</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Details & Actions */}
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                        <div className="space-y-1">
+                          <h4 className="font-['Outfit'] font-bold text-sm text-slate-900 line-clamp-1">
+                            {item.title || 'Untitled Moment'}
+                          </h4>
+                          {item.caption ? (
+                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                              {item.caption}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">No description provided</p>
+                          )}
+                          <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400">
+                            <span>{item.fileSize || 'Image'}</span>
+                            <span>{item.uploadedAt ? new Date(item.uploadedAt).toLocaleDateString() : ''}</span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+                          {/* Reorder Buttons */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveGalleryOrder(index, 'up')}
+                              disabled={index === 0}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                              title="Move photo up in order"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveGalleryOrder(index, 'down')}
+                              disabled={index === filteredGallery.length - 1}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                              title="Move photo down in order"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Edit, Preview & Delete */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingGalleryItem(item)}
+                              className="p-1.5 text-slate-600 hover:text-[#4A1D96] hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                              title="Edit photo title, caption, category"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGalleryPhoto(item)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete photo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16 px-4 bg-slate-50 rounded-3xl border border-dashed border-slate-200 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-100 text-[#4A1D96] flex items-center justify-center mx-auto">
+                    <ImageIcon className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-['Outfit'] font-bold text-base text-slate-800">
+                    No Gallery Photos Found
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {gallerySearchQuery || galleryCategoryFilter !== 'all' || galleryPublishFilter !== 'all'
+                      ? 'No photos match your active search or filter criteria.'
+                      : 'Upload classroom photos and moments to get started.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGallerySearchQuery('');
+                      setGalleryCategoryFilter('all');
+                      setGalleryPublishFilter('all');
+                      setShowAddGalleryModal(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#4A1D96] text-white text-xs font-bold hover:bg-[#3B0764] transition-colors cursor-pointer"
+                  >
+                    Upload First Photo
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ==================================================================== */}
         {/* TAB 7: STUDENT TESTIMONIALS & REVIEWS CMS */}
@@ -2828,6 +3807,112 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     />
                     <span>{(localSettings.showBatchesSection ?? true) ? '🟢 Section Visible' : '⚪ Section Hidden'}</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Hero Video Management & Backblaze B2 Storage */}
+              <div className="p-6 rounded-3xl bg-gradient-to-br from-[#2E1065]/5 via-white to-purple-50/60 border-2 border-purple-200/80 space-y-4 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-200/70 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center shadow-xs">
+                      <Video className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>Hero Section Video Management</span>
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-200">
+                          Backblaze B2 & CDN
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Controls the full-screen cinematic video playing in the homepage hero section.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetHeroVideo}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Reset to Default Video</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                  {/* Preview Player */}
+                  <div className="md:col-span-4 space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 block">Current Hero Video Preview:</span>
+                    <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black border border-purple-200 shadow-xs relative">
+                      <video
+                        key={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                        src={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-[10px] font-bold text-white">
+                        Active Hero Visual
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Video URL & Upload Action */}
+                  <div className="md:col-span-8 space-y-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1 text-xs">
+                        Hero Video URL (Backblaze B2 Direct Link or Local Path)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={localSettings.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, heroVideoUrl: e.target.value })}
+                          placeholder="e.g. /video/wits-lingo-intro.mp4 or https://f005.backblazeb2.com/file/..."
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-purple-200 bg-white text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#4A1D96]"
+                        />
+                      </div>
+                      <span className="text-[10px] text-slate-500 mt-1 block">
+                        Default: <code className="text-purple-700 font-bold">/video/wits-lingo-intro.mp4</code>. Backblaze B2 and cloud CDN streams are supported.
+                      </span>
+                    </div>
+
+                    {/* File Upload to B2 & Server */}
+                    <div className="p-4 rounded-2xl bg-white border border-purple-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Upload New Video File (MP4 / WebM)</span>
+                        </span>
+                        {isUploadingHeroVideo && (
+                          <span className="text-[11px] font-bold text-purple-700 animate-pulse flex items-center gap-1">
+                            <RefreshCw className="w-3 h-3 animate-spin" /> Uploading to Storage...
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Uploads directly to your Backblaze B2 storage bucket and updates the homepage hero video immediately.
+                      </p>
+                      <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold cursor-pointer transition-all shadow-xs ${isUploadingHeroVideo ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <Download className="w-3.5 h-3.5 rotate-180" />
+                        <span>{isUploadingHeroVideo ? 'Uploading Video...' : 'Choose MP4/WebM Video to Upload'}</span>
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm"
+                          className="hidden"
+                          disabled={isUploadingHeroVideo}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUploadHeroVideo(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -4115,6 +5200,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Live Class Google Meet Link (Shared automatically on payment confirmation)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://meet.google.com/abc-defg-hij"
+                    value={newBatch.googleMeetLink || ''}
+                    onChange={(e) => setNewBatch({ ...newBatch, googleMeetLink: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+
                 {/* Website Visibility Toggle */}
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/70 border border-purple-100">
                   <div>
@@ -4213,6 +5311,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <option value="Completed">Completed</option>
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Live Class Google Meet Link (Delivered on Admission & WhatsApp)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://meet.google.com/abc-defg-hij"
+                    value={editingBatch.googleMeetLink || ''}
+                    onChange={(e) => setEditingBatch({ ...editingBatch, googleMeetLink: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                  />
                 </div>
 
                 {/* Website Visibility Toggle */}
@@ -4556,10 +5667,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       setNewMaterial(prev => ({ ...prev, title: suggestedTitle }));
                     }
                   }}
-                  onFileUploaded={({ fileSize }) => {
+                  onFileUploaded={({ fileSize, downloadUrl, b2FileId, b2FileName, mimeType }) => {
                     setNewMaterial(prev => ({
                       ...prev,
                       fileSize: fileSize || prev.fileSize,
+                      downloadUrl: downloadUrl || prev.downloadUrl,
+                      b2FileId: b2FileId || prev.b2FileId,
+                      b2FileName: b2FileName || prev.b2FileName,
+                      mimeType: mimeType || prev.mimeType,
                       fileType: 'pdf'
                     }));
                   }}
@@ -4579,13 +5694,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <span>View-Only Protection (Strict Anti-Download)</span>
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      Blocks Ctrl+S save, Ctrl+P print, right-click menu, and download buttons
+                      Blocks Ctrl+S save, Ctrl+P print, right-click menu, and native toolbar saving
                     </span>
                   </div>
                   <input
                     type="checkbox"
                     checked={newMaterial.isViewOnly}
                     onChange={(e) => setNewMaterial({ ...newMaterial, isViewOnly: e.target.checked })}
+                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                  />
+                </div>
+
+                {/* Allow Download Setting */}
+                <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
+                      <Download className="w-3 h-3 text-[#4A1D96]" />
+                      <span>Allow Student File Download</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Enable a direct download button for enrolled students and website visitors
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newMaterial.allowDownload}
+                    onChange={(e) => setNewMaterial({ ...newMaterial, allowDownload: e.target.checked })}
                     className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
                   />
                 </div>
@@ -5223,10 +6357,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       setEditingMaterial(prev => prev ? ({ ...prev, title: suggestedTitle }) : null);
                     }
                   }}
-                  onFileUploaded={({ fileSize }) => {
+                  onFileUploaded={({ fileSize, downloadUrl, b2FileId, b2FileName, mimeType }) => {
                     setEditingMaterial(prev => prev ? ({
                       ...prev,
                       fileSize: fileSize || prev.fileSize,
+                      downloadUrl: downloadUrl || prev.downloadUrl,
+                      b2FileId: b2FileId || prev.b2FileId,
+                      b2FileName: b2FileName || prev.b2FileName,
+                      mimeType: mimeType || prev.mimeType,
                       fileType: 'pdf'
                     }) : null);
                   }}
@@ -5253,6 +6391,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     type="checkbox"
                     checked={editingMaterial.isViewOnly !== false}
                     onChange={(e) => setEditingMaterial({ ...editingMaterial, isViewOnly: e.target.checked })}
+                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                  />
+                </div>
+
+                {/* Allow Download Setting */}
+                <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
+                      <Download className="w-3 h-3 text-[#4A1D96]" />
+                      <span>Allow Student File Download</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Enable direct file downloads for students and website visitors
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editingMaterial.allowDownload === true}
+                    onChange={(e) => setEditingMaterial({ ...editingMaterial, allowDownload: e.target.checked })}
                     className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
                   />
                 </div>
@@ -5327,6 +6484,435 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             description={previewingPdfMaterial.description}
             allowDownload={false}
           />
+        )}
+
+        {/* ==================================================================== */}
+        {/* MODAL: UPLOAD MULTIPLE GALLERY IMAGES (BACKBLAZE B2 STORAGE) */}
+        {/* ==================================================================== */}
+        {showAddGalleryModal && (
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150 overscroll-contain smooth-scroll-viewport"
+            onClick={() => !isUploadingGallery && setShowAddGalleryModal(false)}
+          >
+            <div 
+              className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-7 shadow-2xl border border-slate-100 space-y-6 max-h-[90vh] overflow-y-auto overscroll-contain smooth-scroll-viewport"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#3B0764] to-[#4A1D96] text-white flex items-center justify-center shadow-xs">
+                    <Images className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
+                      Upload Photos to Gallery (Backblaze B2)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Select one or multiple photos to upload directly to Backblaze B2 storage.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isUploadingGallery}
+                  onClick={() => setShowAddGalleryModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drag & Drop File Picker */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    const newFiles: typeof selectedUploadFiles = [];
+                    Array.from(e.dataTransfer.files).forEach((file: File) => {
+                      if (file.type.startsWith('image/')) {
+                        const preview = URL.createObjectURL(file);
+                        const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+                        newFiles.push({
+                          file,
+                          preview,
+                          title: cleanTitle,
+                          caption: '',
+                          category: 'Classrooms'
+                        });
+                      }
+                    });
+                    setSelectedUploadFiles(prev => [...prev, ...newFiles]);
+                  }
+                }}
+                className="border-2 border-dashed border-purple-200 hover:border-purple-400 bg-purple-50/40 hover:bg-purple-50/70 rounded-3xl p-6 sm:p-8 text-center transition-all cursor-pointer relative"
+              >
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                  disabled={isUploadingGallery}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      const newFiles: typeof selectedUploadFiles = [];
+                      Array.from(e.target.files).forEach((file: File) => {
+                        const preview = URL.createObjectURL(file);
+                        const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+                        newFiles.push({
+                          file,
+                          preview,
+                          title: cleanTitle,
+                          caption: '',
+                          category: 'Classrooms'
+                        });
+                      });
+                      setSelectedUploadFiles(prev => [...prev, ...newFiles]);
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+
+                <div className="space-y-2 pointer-events-none">
+                  <div className="w-12 h-12 rounded-2xl bg-white border border-purple-200 text-[#4A1D96] flex items-center justify-center mx-auto shadow-2xs">
+                    <FolderPlus className="w-6 h-6" />
+                  </div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Click to browse or drag & drop multiple images
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Supports <strong className="text-slate-700">JPEG, PNG, WebP, AVIF, GIF</strong> (Up to 25MB each)
+                  </p>
+                </div>
+              </div>
+
+              {/* Selected Files Preview & Metadata Form */}
+              {selectedUploadFiles.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#4A1D96]" />
+                      <span>Selected Photos ({selectedUploadFiles.length})</span>
+                    </span>
+
+                    {/* Batch Category Setter */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500 font-medium">Apply category to all:</span>
+                      <select
+                        onChange={(e) => {
+                          const cat = e.target.value;
+                          if (cat) {
+                            setSelectedUploadFiles(prev => prev.map(f => ({ ...f, category: cat })));
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-900 border border-purple-200 font-bold text-xs"
+                      >
+                        <option value="">Select Category...</option>
+                        <option value="Classrooms">Classrooms</option>
+                        <option value="Live Sessions">Live Sessions</option>
+                        <option value="Events & Workshops">Events & Workshops</option>
+                        <option value="Student Activities">Student Activities</option>
+                        <option value="Community">Community</option>
+                        <option value="General">General</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                    {selectedUploadFiles.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                          <img
+                            src={item.preview}
+                            alt="preview"
+                            className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
+                          />
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={item.title}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedUploadFiles(prev => prev.map((f, i) => i === idx ? { ...f, title: val } : f));
+                              }}
+                              placeholder="Photo Title..."
+                              className="w-full px-2.5 py-1 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#4A1D96]"
+                            />
+                            <input
+                              type="text"
+                              value={item.caption}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedUploadFiles(prev => prev.map((f, i) => i === idx ? { ...f, caption: val } : f));
+                              }}
+                              placeholder="Optional short caption..."
+                              className="w-full px-2.5 py-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#4A1D96]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                          <select
+                            value={item.category}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSelectedUploadFiles(prev => prev.map((f, i) => i === idx ? { ...f, category: val } : f));
+                            }}
+                            className="px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg text-slate-800"
+                          >
+                            <option value="Classrooms">Classrooms</option>
+                            <option value="Live Sessions">Live Sessions</option>
+                            <option value="Events & Workshops">Events & Workshops</option>
+                            <option value="Student Activities">Student Activities</option>
+                            <option value="Community">Community</option>
+                            <option value="General">General</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedUploadFiles(prev => prev.filter((_, i) => i !== idx));
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Remove from queue"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Action Button */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isUploadingGallery}
+                  onClick={() => {
+                    setSelectedUploadFiles([]);
+                    setShowAddGalleryModal(false);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  id="submit-gallery-upload-btn"
+                  disabled={selectedUploadFiles.length === 0 || isUploadingGallery}
+                  onClick={() => handleUploadGalleryFiles(selectedUploadFiles)}
+                  className="px-6 py-2.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold text-xs shadow-md shadow-purple-900/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUploadingGallery ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Uploading to Backblaze B2...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Upload & Publish {selectedUploadFiles.length > 0 ? `(${selectedUploadFiles.length})` : ''}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* MODAL: EDIT GALLERY ITEM METADATA */}
+        {/* ==================================================================== */}
+        {editingGalleryItem && (
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150 overscroll-contain smooth-scroll-viewport"
+            onClick={() => setEditingGalleryItem(null)}
+          >
+            <div 
+              className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-100 space-y-5 max-h-[90vh] overflow-y-auto overscroll-contain smooth-scroll-viewport"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-100 text-[#4A1D96] flex items-center justify-center">
+                    <Edit3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
+                      Edit Gallery Photo Details
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Update title, caption description, category, and display order.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingGalleryItem(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Photo Thumbnail */}
+              <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black border border-slate-200 relative">
+                <img
+                  src={editingGalleryItem.imageUrl}
+                  alt={editingGalleryItem.title || 'Edit'}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              {/* Edit Form */}
+              <form onSubmit={handleUpdateGalleryMetadata} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Photo Title:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingGalleryItem.title || ''}
+                    onChange={(e) => setEditingGalleryItem({ ...editingGalleryItem, title: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#4A1D96] font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Description / Caption:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editingGalleryItem.caption || ''}
+                    onChange={(e) => setEditingGalleryItem({ ...editingGalleryItem, caption: e.target.value })}
+                    placeholder="Brief description of this moment..."
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#4A1D96] font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Category:
+                    </label>
+                    <select
+                      value={editingGalleryItem.category || 'Classrooms'}
+                      onChange={(e) => setEditingGalleryItem({ ...editingGalleryItem, category: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 font-semibold"
+                    >
+                      <option value="Classrooms">Classrooms</option>
+                      <option value="Live Sessions">Live Sessions</option>
+                      <option value="Events & Workshops">Events & Workshops</option>
+                      <option value="Student Activities">Student Activities</option>
+                      <option value="Community">Community</option>
+                      <option value="General">General</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Display Order:
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editingGalleryItem.displayOrder || 1}
+                      onChange={(e) => setEditingGalleryItem({ ...editingGalleryItem, displayOrder: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* Published Checkbox */}
+                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-purple-950 block text-xs">
+                      Published on Public /gallery
+                    </span>
+                    <span className="text-[11px] text-purple-700">
+                      When checked, this photo will be visible to all website visitors.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editingGalleryItem.isPublished !== false}
+                    onChange={(e) => setEditingGalleryItem({ ...editingGalleryItem, isPublished: e.target.checked })}
+                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingGalleryItem(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* MODAL: ADMIN LIGHTBOX PREVIEW */}
+        {/* ==================================================================== */}
+        {previewGalleryItem && (
+          <div 
+            className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+            onClick={() => setPreviewGalleryItem(null)}
+          >
+            <div 
+              className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewGalleryItem(null)}
+                className="absolute top-2 right-2 p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer z-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="rounded-2xl overflow-hidden border border-white/20 bg-black max-h-[75vh] flex items-center justify-center">
+                <img
+                  src={previewGalleryItem.imageUrl}
+                  alt={previewGalleryItem.title || 'Preview'}
+                  className="max-h-[75vh] max-w-full object-contain"
+                />
+              </div>
+
+              <div className="mt-3 p-3 bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl text-white text-center w-full max-w-lg space-y-1">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-[#4A1D96] text-[10px] font-bold uppercase text-purple-200">
+                    {previewGalleryItem.category || 'Classrooms'}
+                  </span>
+                  <h4 className="font-bold text-sm">{previewGalleryItem.title}</h4>
+                </div>
+                {previewGalleryItem.caption && (
+                  <p className="text-xs text-purple-200/90">{previewGalleryItem.caption}</p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ==================================================================== */}
