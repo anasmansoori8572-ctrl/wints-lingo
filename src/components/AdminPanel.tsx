@@ -42,7 +42,7 @@ interface AdminPanelProps {
   onUpdateAnnouncements?: (announcements: Announcement[]) => void;
   materials?: StudyMaterial[];
   onUpdateMaterials?: (materials: StudyMaterial[]) => void;
-  initialTab?: 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+  initialTab?: 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
   onTabChange?: (tab: string) => void;
 }
 
@@ -67,7 +67,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   initialTab,
   onTabChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>(initialTab || 'students');
+  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>(initialTab || 'students');
 
   useEffect(() => {
     if (initialTab && initialTab !== activeTab) {
@@ -343,10 +343,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newYouTubeResource, setNewYouTubeResource] = useState({
     youtubeUrl: '',
     title: '',
-    description: 'Watch this curated video lesson for practical spoken English fluency.',
+    description: 'Watch this video lesson for practical spoken English fluency.',
     category: 'Daily English',
     displayOrder: 1,
     isPublished: true,
+    duration: '',
     thumbnailUrl: '',
     b2ThumbnailId: '',
     b2ThumbnailName: ''
@@ -363,10 +364,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Local site settings copy for CMS editing
   const [localSettings, setLocalSettings] = useState<SiteSettings>({ ...siteSettings });
 
+  // YouTube Channel URL & Management states
+  const [youtubeChannelUrl, setYoutubeChannelUrl] = useState<string>(() => {
+    return siteSettings.youtubeUrl || 'https://www.youtube.com/@witslingoeng';
+  });
+  const [isSavingYoutubeChannel, setIsSavingYoutubeChannel] = useState(false);
+  const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
+  const [youtubeCategoryFilter, setYoutubeCategoryFilter] = useState('all');
+  const [youtubePublishFilter, setYoutubePublishFilter] = useState<'all' | 'published' | 'draft'>('all');
+
+  // Sync YouTube channel input if siteSettings changes from outside
+  useEffect(() => {
+    if (siteSettings.youtubeUrl) {
+      setYoutubeChannelUrl(siteSettings.youtubeUrl);
+    }
+  }, [siteSettings.youtubeUrl]);
+
   // Show transient feedback message
   const triggerFeedback = (msg: string) => {
     setFeedbackMessage(msg);
     setTimeout(() => setFeedbackMessage(null), 3500);
+  };
+
+  const handleSaveYoutubeChannel = async () => {
+    if (!youtubeChannelUrl.trim()) {
+      alert('Please enter a valid YouTube channel URL.');
+      return;
+    }
+    setIsSavingYoutubeChannel(true);
+    try {
+      const updatedSettings: SiteSettings = {
+        ...localSettings,
+        youtubeUrl: youtubeChannelUrl.trim()
+      };
+      setLocalSettings(updatedSettings);
+      onUpdateSiteSettings(updatedSettings);
+      localStorage.setItem('wits_lingo_site_settings', JSON.stringify(updatedSettings));
+
+      const res = await fetch('/api/cms/content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          settings: {
+            youtubeUrl: youtubeChannelUrl.trim()
+          }
+        })
+      });
+
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent('wits_lingo_settings_updated', { detail: updatedSettings }));
+        window.dispatchEvent(new Event('storage'));
+        triggerFeedback('Official YouTube Channel URL saved successfully!');
+      } else {
+        triggerFeedback('Channel URL saved locally.');
+      }
+    } catch (err) {
+      console.warn('Could not save YouTube channel URL:', err);
+      triggerFeedback('Channel URL saved locally.');
+    } finally {
+      setIsSavingYoutubeChannel(false);
+    }
   };
 
   // Load initial admin data
@@ -1152,11 +1212,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleAddYouTubeResource = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newYouTubeResource.youtubeUrl.trim()) {
-      alert('Please enter a valid YouTube video URL.');
+    const rawUrl = newYouTubeResource.youtubeUrl.trim();
+    const vidId = extractYouTubeVideoId(rawUrl);
+    if (!vidId) {
+      alert('Invalid YouTube Video URL. Please enter a valid YouTube video link (e.g., https://www.youtube.com/watch?v=... or https://youtu.be/... or https://www.youtube.com/shorts/...).');
       return;
     }
 
+    const finalVideoUrl = `https://www.youtube.com/watch?v=${vidId}`;
     const finalTitle = newYouTubeResource.title.trim() || 'YouTube Spoken English Lesson';
     const newId = `mat-yt-${Date.now()}`;
     const mat: StudyMaterial = {
@@ -1167,14 +1230,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: newYouTubeResource.description.trim() || 'Watch this video lesson for practical spoken English fluency.',
       fileType: 'youtube',
       fileSize: 'Video',
-      downloadUrl: newYouTubeResource.youtubeUrl.trim(),
-      youtubeUrl: newYouTubeResource.youtubeUrl.trim(),
-      thumbnailUrl: newYouTubeResource.thumbnailUrl.trim() || undefined,
+      downloadUrl: finalVideoUrl,
+      youtubeUrl: finalVideoUrl,
+      thumbnailUrl: newYouTubeResource.thumbnailUrl.trim() || `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`,
       b2ThumbnailId: newYouTubeResource.b2ThumbnailId || undefined,
       b2ThumbnailName: newYouTubeResource.b2ThumbnailName || undefined,
+      duration: newYouTubeResource.duration?.trim() || 'Video Lesson',
+      views: 'Wits Lingo',
       isPublished: newYouTubeResource.isPublished !== false,
       isVisibleOnWebsite: newYouTubeResource.isPublished !== false,
-      displayOrder: newYouTubeResource.displayOrder || (materials.length + 1),
+      displayOrder: newYouTubeResource.displayOrder || (materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube').length + 1),
       category: newYouTubeResource.category || 'Daily English',
       level: 'All Levels',
       uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -1210,10 +1275,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewYouTubeResource({
       youtubeUrl: '',
       title: '',
-      description: 'Watch this curated video lesson for practical spoken English fluency.',
+      description: 'Watch this video lesson for practical spoken English fluency.',
       category: 'Daily English',
-      displayOrder: materials.length + 2,
+      displayOrder: materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube').length + 2,
       isPublished: true,
+      duration: '',
       thumbnailUrl: '',
       b2ThumbnailId: '',
       b2ThumbnailName: ''
@@ -1224,11 +1290,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleUpdateMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMaterial) return;
+
+    let finalYoutubeUrl = editingMaterial.youtubeUrl;
+    let finalThumb = editingMaterial.thumbnailUrl;
+
+    if (editingMaterial.resourceType === 'youtube' || editingMaterial.fileType === 'youtube') {
+      const rawUrl = (editingMaterial.youtubeUrl || '').trim();
+      const vidId = extractYouTubeVideoId(rawUrl);
+      if (!vidId) {
+        alert('Invalid YouTube Video URL. Please enter a valid YouTube video link (e.g., https://www.youtube.com/watch?v=... or https://youtu.be/... or https://www.youtube.com/shorts/...).');
+        return;
+      }
+      finalYoutubeUrl = `https://www.youtube.com/watch?v=${vidId}`;
+      if (!finalThumb) {
+        finalThumb = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
+      }
+    }
+
     const opt = optimizePdfUrl(editingMaterial.pdfUrl || '');
     const updated: StudyMaterial = {
       ...editingMaterial,
+      youtubeUrl: finalYoutubeUrl,
+      thumbnailUrl: finalThumb,
       pdfUrl: opt.embedUrl || editingMaterial.pdfUrl,
-      downloadUrl: (editingMaterial.downloadUrl && editingMaterial.downloadUrl !== '#') ? editingMaterial.downloadUrl : (editingMaterial.resourceType === 'youtube' ? (editingMaterial.youtubeUrl || '') : `/api/files/download/${editingMaterial.id}`),
+      downloadUrl: (editingMaterial.downloadUrl && editingMaterial.downloadUrl !== '#') ? editingMaterial.downloadUrl : (editingMaterial.resourceType === 'youtube' ? (finalYoutubeUrl || '') : `/api/files/download/${editingMaterial.id}`),
       isViewOnly: editingMaterial.isViewOnly !== false,
       allowDownload: Boolean(editingMaterial.allowDownload),
       category: editingMaterial.category || (editingMaterial.resourceType === 'youtube' ? 'Daily English' : 'Worksheets'),
@@ -1978,7 +2063,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             { id: 'batches', label: `Batches & Capacity (${batches.length})`, icon: RefreshCw },
             { id: 'classes', label: 'Live Classes Scheduler', icon: Video },
             { id: 'recordings', label: 'Class Recordings', icon: Play },
-            { id: 'materials', label: 'Study Notes & PDFs', icon: FileText },
+            { id: 'materials', label: `Study Notes & PDFs (${materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube').length})`, icon: FileText },
+            { id: 'youtube-lessons', label: `Video Lessons / YouTube (${materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube').length})`, icon: Youtube },
             { id: 'hero-video', label: 'Hero Video', icon: Film },
             { id: 'gallery', label: `Gallery (${galleryItems.length})`, icon: ImageIcon },
             { id: 'testimonials', label: `Student Reviews (${testimonials.length})`, icon: MessageSquare },
@@ -3026,11 +3112,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* TAB 6: LEARNING RESOURCES (PDFS & YOUTUBE VIDEOS) */}
+        {/* ==================================================================== */}
+        {/* TAB 6: STUDY NOTES & PDFS (VIEW-ONLY PROTECTED & DOWNLOADABLE GUIDES) */}
         {/* ==================================================================== */}
         {activeTab === 'materials' && (() => {
           const pdfMaterials = materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube');
-          const ytMaterials = materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube');
 
           const filteredPdfs = pdfMaterials.filter(m => {
             const matchBatch = materialFilterBatch === 'all' || m.batchId === materialFilterBatch;
@@ -3041,14 +3127,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             return matchBatch && matchCat && matchSearch;
           });
 
-          const filteredYts = ytMaterials.filter(m => {
-            const matchCat = materialCategoryFilter === 'all' || m.category === materialCategoryFilter;
-            const matchSearch = !materialSearchQuery.trim() ||
-              m.title.toLowerCase().includes(materialSearchQuery.toLowerCase()) ||
-              m.description.toLowerCase().includes(materialSearchQuery.toLowerCase());
-            return matchCat && matchSearch;
-          });
-
           return (
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
               {/* Section Top Header */}
@@ -3056,289 +3134,405 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                      Learning Resources Management
+                      Study Notes & PDFs Management
                     </h2>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
-                      {materials.length} Total Resources
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                      {pdfMaterials.length} PDF Guides
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Manage view-only PDF study guides, worksheets, and official YouTube video lessons displayed in the website Knowledge Bank.
+                    Manage view-only PDF study guides, worksheets, and curriculum notes displayed in the Knowledge Bank.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                  {materialSubTab === 'pdf' ? (
-                    <button
-                      onClick={() => setShowAddMaterialModal(true)}
-                      id="admin-add-mat-btn"
-                      className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Upload PDF Guide</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setNewYouTubeResource({
-                          youtubeUrl: '',
-                          title: '',
-                          description: 'Watch this curated video lesson for practical spoken English fluency.',
-                          category: 'Daily English',
-                          displayOrder: ytMaterials.length + 1,
-                          isPublished: true,
-                          thumbnailUrl: '',
-                          b2ThumbnailId: '',
-                          b2ThumbnailName: ''
-                        });
-                        setShowAddYouTubeModal(true);
-                      }}
-                      id="admin-add-yt-btn"
-                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add YouTube Video</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setShowAddMaterialModal(true)}
+                    id="admin-add-mat-btn"
+                    className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Upload PDF Guide</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleTabSelect('youtube-lessons')}
+                    className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 transition-colors border border-red-200 cursor-pointer"
+                  >
+                    <Youtube className="w-3.5 h-3.5 text-red-600" />
+                    <span>Video Lessons CMS →</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Resource Sub-Tabs Selector */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setMaterialSubTab('pdf'); setMaterialCategoryFilter('all'); }}
-                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      materialSubTab === 'pdf'
-                        ? 'bg-[#4A1D96] text-white shadow-xs'
-                        : 'bg-white text-slate-700 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>PDF Study Guides</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${materialSubTab === 'pdf' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-900'}`}>
-                      {pdfMaterials.length}
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => { setMaterialSubTab('youtube'); setMaterialCategoryFilter('all'); }}
-                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      materialSubTab === 'youtube'
-                        ? 'bg-red-600 text-white shadow-xs'
-                        : 'bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 border border-slate-200'
-                    }`}
-                  >
-                    <Youtube className="w-3.5 h-3.5" />
-                    <span>YouTube Video Lessons</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${materialSubTab === 'youtube' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>
-                      {ytMaterials.length}
-                    </span>
-                  </button>
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+                <div className="relative flex-1">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search document title, description..."
+                    value={materialSearchQuery}
+                    onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                  />
                 </div>
 
-                {/* Search & Category Filter Bar */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 sm:w-48">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={materialFilterBatch}
+                    onChange={(e) => setMaterialFilterBatch(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                  >
+                    <option value="all">All Batches</option>
+                    {batches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={materialCategoryFilter}
+                    onChange={(e) => setMaterialCategoryFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                  >
+                    <option value="all">All Categories</option>
+                    <option value="Worksheets">Worksheets</option>
+                    <option value="English Vocabulary">English Vocabulary</option>
+                    <option value="Daily Sentences">Daily Sentences</option>
+                    <option value="Grammar Guides">Grammar Guides</option>
+                    <option value="Speaking Practice">Speaking Practice</option>
+                    <option value="E-books">E-books</option>
+                    <option value="Study Notes">Study Notes</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Protected Notice Banner */}
+              <div className="p-4 rounded-2xl bg-linear-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">Protected PDF Viewing Engine Active</h4>
+                    <p className="text-slate-600 mt-0.5 leading-relaxed">
+                      PDF notes and worksheets are stored in <strong>Backblaze B2</strong> and rendered in a secure View-Only container. Right-click, Ctrl+S save, and native saving are intercepted to protect academy notes.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-purple-900 bg-white/80 px-3 py-1.5 rounded-xl border border-purple-200">
+                  <Cloud className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Backblaze B2 Cloud Storage</span>
+                </div>
+              </div>
+
+              {/* PDF STUDY GUIDES GRID */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredPdfs.length > 0 ? (
+                  filteredPdfs.map((mat) => {
+                    const batchObj = batches.find(b => b.id === mat.batchId);
+                    const opt = optimizePdfUrl(mat.pdfUrl || '');
+                    const isPub = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
+
+                    return (
+                      <div
+                        key={mat.id}
+                        className={`p-4.5 rounded-2xl border transition-all space-y-3 flex flex-col justify-between ${
+                          isPub ? 'border-slate-200 bg-[#FAF9FC] hover:border-purple-300 shadow-2xs' : 'border-dashed border-amber-300 bg-amber-50/40'
+                        }`}
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
+                            <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900">
+                              {mat.category || 'Worksheets'}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                #{mat.displayOrder || 1}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-500 font-semibold">
+                                {mat.fileSize || '1.8 MB'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-500 block truncate">
+                              📚 {batchObj ? batchObj.name : 'Academy Wide (All Batches)'}
+                            </span>
+                            <h4 className="font-bold text-sm text-slate-900 mt-0.5 line-clamp-1">{mat.title}</h4>
+                            <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
+                          </div>
+
+                          {/* Storage & Visibility Status Badges */}
+                          <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePublishMaterial(mat)}
+                              className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                                isPub
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                              }`}
+                              title="Click to Toggle Publish / Draft status"
+                            >
+                              {isPub ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
+                              <span>{isPub ? 'Published' : 'Draft (Unpublished)'}</span>
+                            </button>
+
+                            {mat.allowDownload ? (
+                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold flex items-center gap-1">
+                                <Download className="w-2.5 h-2.5" />
+                                <span>Download On</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>View-Only</span>
+                              </span>
+                            )}
+
+                            {(mat.b2FileId || mat.b2FileName || mat.pdfUrl?.includes('backblazeb2.com') || mat.pdfUrl?.includes('/api/files/pdf/')) ? (
+                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
+                                <Cloud className="w-2.5 h-2.5 text-indigo-600" />
+                                <span>B2 Cloud</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-medium truncate max-w-[140px]">
+                                {opt.provider}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                          <button
+                            onClick={() => setPreviewingPdfMaterial({
+                              title: mat.title,
+                              pdfUrl: mat.pdfUrl || mat.downloadUrl,
+                              description: mat.description,
+                              category: mat.category || 'Study Material',
+                              batchName: batchObj?.name || 'Wits Lingo Academy'
+                            })}
+                            className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Test View-Only Reader as a student"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Test Reader</span>
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setEditingMaterial(mat)}
+                              className="p-1.5 text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Material & Replace PDF"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMaterial(mat.id, mat.title)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete PDF Resource"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-3 py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    No PDF study guides match the selected filters. Click "Upload PDF Guide" to add materials.
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ==================================================================== */}
+        {/* TAB 7: VIDEO LESSONS / YOUTUBE (ADMIN-CONTROLLED CMS) */}
+        {/* ==================================================================== */}
+        {activeTab === 'youtube-lessons' && (() => {
+          const ytVideos = materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube');
+          const publishedCount = ytVideos.filter(m => m.isPublished !== false && m.isVisibleOnWebsite !== false).length;
+          const draftCount = ytVideos.length - publishedCount;
+
+          const filteredVideos = ytVideos.filter(m => {
+            const matchCat = youtubeCategoryFilter === 'all' || m.category === youtubeCategoryFilter;
+            const isPub = m.isPublished !== false && m.isVisibleOnWebsite !== false;
+            const matchPub = youtubePublishFilter === 'all' || (youtubePublishFilter === 'published' ? isPub : !isPub);
+            const matchSearch = !youtubeSearchQuery.trim() ||
+              m.title.toLowerCase().includes(youtubeSearchQuery.toLowerCase()) ||
+              m.description.toLowerCase().includes(youtubeSearchQuery.toLowerCase());
+            return matchCat && matchPub && matchSearch;
+          }).sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+
+          return (
+            <div className="space-y-6">
+              {/* SECTION A: OFFICIAL YOUTUBE CHANNEL SETTINGS */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-red-100 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Youtube className="w-5 h-5 fill-red-600 text-red-600" />
+                    </div>
+                    <div>
+                      <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                        Official YouTube Channel Settings
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Configure the official channel link for the top <strong>"Watch on YouTube"</strong> button across the entire public website.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href={youtubeChannelUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer self-start md:self-auto"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Test Channel Link</span>
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end pt-2">
+                  <div className="md:col-span-9 space-y-1.5">
+                    <label className="font-bold text-slate-700 text-xs flex items-center justify-between">
+                      <span>YouTube Channel URL</span>
+                      <span className="text-[11px] text-slate-400 font-normal">Default: https://www.youtube.com/@witslingoeng</span>
+                    </label>
                     <input
-                      type="text"
-                      placeholder="Search title, description..."
-                      value={materialSearchQuery}
-                      onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                      type="url"
+                      value={youtubeChannelUrl}
+                      onChange={(e) => setYoutubeChannelUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/@witslingoeng"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-xs text-slate-900 font-mono"
                     />
                   </div>
 
-                  {materialSubTab === 'pdf' && (
-                    <select
-                      value={materialFilterBatch}
-                      onChange={(e) => setMaterialFilterBatch(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                  <div className="md:col-span-3">
+                    <button
+                      type="button"
+                      disabled={isSavingYoutubeChannel}
+                      onClick={handleSaveYoutubeChannel}
+                      className="w-full py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                     >
-                      <option value="all">All Batches</option>
-                      {batches.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                  )}
+                      <Save className="w-4 h-4" />
+                      <span>{isSavingYoutubeChannel ? 'Saving...' : 'Save Channel URL'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* View-Only Security Notice Banner */}
-              {materialSubTab === 'pdf' ? (
-                <div className="p-4 rounded-2xl bg-linear-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <ShieldCheck className="w-4 h-4" />
+              {/* SECTION B: VIDEO LESSONS MANAGEMENT */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
+                {/* Header & Stats */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                        Video Lessons CMS
+                      </h2>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                        {ytVideos.length} Videos
+                      </span>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">Protected PDF Viewing Engine Active</h4>
-                      <p className="text-slate-600 mt-0.5 leading-relaxed">
-                        PDF notes and worksheets are stored in <strong>Backblaze B2</strong> and rendered in a secure View-Only container. Right-click, Ctrl+S save, and native saving are intercepted to protect academy notes.
-                      </p>
-                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Manage dynamic video lesson cards displayed in the website Learning Resources section.
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-purple-900 bg-white/80 px-3 py-1.5 rounded-xl border border-purple-200">
-                    <Cloud className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Backblaze B2 Cloud Storage</span>
+
+                  <button
+                    onClick={() => {
+                      setNewYouTubeResource({
+                        youtubeUrl: '',
+                        title: '',
+                        description: 'Watch this video lesson for practical spoken English fluency.',
+                        category: 'Daily English',
+                        displayOrder: ytVideos.length + 1,
+                        isPublished: true,
+                        duration: 'Video Lesson',
+                        thumbnailUrl: '',
+                        b2ThumbnailId: '',
+                        b2ThumbnailName: ''
+                      });
+                      setShowAddYouTubeModal(true);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add Video</span>
+                  </button>
+                </div>
+
+                {/* Stats Bar */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                    <span className="text-[11px] text-slate-500 font-medium block">Total Videos</span>
+                    <span className="text-lg font-extrabold text-slate-800 font-['Outfit']">{ytVideos.length}</span>
+                  </div>
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl">
+                    <span className="text-[11px] text-emerald-700 font-medium block">Published (Live)</span>
+                    <span className="text-lg font-extrabold text-emerald-900 font-['Outfit']">{publishedCount}</span>
+                  </div>
+                  <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl">
+                    <span className="text-[11px] text-amber-700 font-medium block">Drafts (Hidden)</span>
+                    <span className="text-lg font-extrabold text-amber-900 font-['Outfit']">{draftCount}</span>
                   </div>
                 </div>
-              ) : (
-                <div className="p-4 rounded-2xl bg-linear-to-r from-red-50 via-rose-50 to-red-50 border border-red-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Youtube className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">Official YouTube Learning Resources</h4>
-                      <p className="text-slate-600 mt-0.5 leading-relaxed">
-                        Add video lessons by pasting the YouTube URL. Video titles and default thumbnails are auto-retrieved, and entire cards on the website are clickable to take learners to YouTube.
-                      </p>
-                    </div>
+
+                {/* Filters & Search */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search video title, description..."
+                      value={youtubeSearchQuery}
+                      onChange={(e) => setYoutubeSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-hidden focus:border-red-600"
+                    />
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-red-900 bg-white/80 px-3 py-1.5 rounded-xl border border-red-200">
-                    <ExternalLink className="w-3.5 h-3.5 text-red-600" />
-                    <span>Auto-Embed & Thumbnail Engine</span>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={youtubeCategoryFilter}
+                      onChange={(e) => setYoutubeCategoryFilter(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-red-600"
+                    >
+                      <option value="all">All Categories</option>
+                      <option value="Pronunciation & Phonics">Pronunciation & Phonics</option>
+                      <option value="Spoken English & Fluency">Spoken English & Fluency</option>
+                      <option value="Learning Mindset">Learning Mindset</option>
+                      <option value="English Foundations">English Foundations</option>
+                      <option value="Daily Motivation">Daily Motivation</option>
+                      <option value="Daily English">Daily English</option>
+                      <option value="Vocabulary">Vocabulary</option>
+                      <option value="Grammar Made Easy">Grammar Made Easy</option>
+                      <option value="General">General</option>
+                    </select>
+
+                    <select
+                      value={youtubePublishFilter}
+                      onChange={(e) => setYoutubePublishFilter(e.target.value as any)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-red-600"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="published">Published Only</option>
+                      <option value="draft">Drafts Only</option>
+                    </select>
                   </div>
                 </div>
-              )}
 
-              {/* ================================================================ */}
-              {/* SUB-TAB 1: PDF STUDY GUIDES GRID */}
-              {/* ================================================================ */}
-              {materialSubTab === 'pdf' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredPdfs.length > 0 ? (
-                    filteredPdfs.map((mat) => {
-                      const batchObj = batches.find(b => b.id === mat.batchId);
-                      const opt = optimizePdfUrl(mat.pdfUrl || '');
-                      const isPub = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
-
-                      return (
-                        <div
-                          key={mat.id}
-                          className={`p-4.5 rounded-2xl border transition-all space-y-3 flex flex-col justify-between ${
-                            isPub ? 'border-slate-200 bg-[#FAF9FC] hover:border-purple-300 shadow-2xs' : 'border-dashed border-amber-300 bg-amber-50/40'
-                          }`}
-                        >
-                          <div className="space-y-2.5">
-                            <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
-                              <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900">
-                                {mat.category || 'Worksheets'}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                  #{mat.displayOrder || 1}
-                                </span>
-                                <span className="text-[10px] font-mono text-slate-500 font-semibold">
-                                  {mat.fileSize || '1.8 MB'}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] font-semibold text-slate-500 block truncate">
-                                📚 {batchObj ? batchObj.name : 'Academy Wide (All Batches)'}
-                              </span>
-                              <h4 className="font-bold text-sm text-slate-900 mt-0.5 line-clamp-1">{mat.title}</h4>
-                              <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
-                            </div>
-
-                            {/* Storage & Visibility Status Badges */}
-                            <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
-                              {/* Publish Status Toggle */}
-                              <button
-                                type="button"
-                                onClick={() => handleTogglePublishMaterial(mat)}
-                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer flex items-center gap-1 ${
-                                  isPub
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                                    : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
-                                }`}
-                                title="Click to Toggle Publish / Draft status"
-                              >
-                                {isPub ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
-                                <span>{isPub ? 'Published' : 'Draft (Unpublished)'}</span>
-                              </button>
-
-                              {mat.allowDownload ? (
-                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold flex items-center gap-1">
-                                  <Download className="w-2.5 h-2.5" />
-                                  <span>Download On</span>
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
-                                  <Lock className="w-2.5 h-2.5" />
-                                  <span>View-Only</span>
-                                </span>
-                              )}
-
-                              {(mat.b2FileId || mat.b2FileName || mat.pdfUrl?.includes('backblazeb2.com') || mat.pdfUrl?.includes('/api/files/pdf/')) ? (
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
-                                  <Cloud className="w-2.5 h-2.5 text-indigo-600" />
-                                  <span>B2 Cloud</span>
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-medium truncate max-w-[140px]">
-                                  {opt.provider}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
-                            <button
-                              onClick={() => setPreviewingPdfMaterial({
-                                title: mat.title,
-                                pdfUrl: mat.pdfUrl || mat.downloadUrl,
-                                description: mat.description,
-                                category: mat.category || 'Study Material',
-                                batchName: batchObj?.name || 'Wits Lingo Academy'
-                              })}
-                              className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="Test View-Only Reader as a student"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>Test Reader</span>
-                            </button>
-
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => setEditingMaterial(mat)}
-                                className="p-1.5 text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
-                                title="Edit Material & Replace PDF"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteMaterial(mat.id, mat.title)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Delete PDF Resource"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="col-span-3 py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                      No PDF study guides match the selected filters. Click "Upload PDF Guide" to add materials.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ================================================================ */}
-              {/* SUB-TAB 2: YOUTUBE VIDEO LESSONS GRID */}
-              {/* ================================================================ */}
-              {materialSubTab === 'youtube' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredYts.length > 0 ? (
-                    filteredYts.map((mat) => {
+                {/* Videos Grid */}
+                {filteredVideos.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredVideos.map((mat) => {
                       const isPub = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
                       const thumb = mat.thumbnailUrl || (mat.youtubeUrl ? `https://img.youtube.com/vi/${extractYouTubeVideoId(mat.youtubeUrl) || 'dQw4w9WgXcQ'}/hqdefault.jpg` : '');
 
@@ -3368,16 +3562,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   <Play className="w-4 h-4 fill-white ml-0.5" />
                                 </div>
                               </div>
-                              <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white">
-                                {mat.duration || '12:00'}
-                              </span>
+                              {mat.duration && (
+                                <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white">
+                                  {mat.duration}
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
                               <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700">
                                 {mat.category || 'Daily English'}
                               </span>
-                              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                                 Order #{mat.displayOrder || 1}
                               </span>
                             </div>
@@ -3387,7 +3583,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
                             </div>
 
-                            {/* Status & YouTube link */}
+                            {/* Status & Thumbnail Tag */}
                             <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
                               <button
                                 type="button"
@@ -3403,9 +3599,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 <span>{isPub ? 'Published' : 'Draft'}</span>
                               </button>
 
-                              {mat.b2ThumbnailId && (
+                              {mat.b2ThumbnailId ? (
                                 <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
                                   Custom B2 Thumbnail
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">
+                                  Auto YouTube Thumbnail
                                 </span>
                               )}
                             </div>
@@ -3414,27 +3614,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           {/* Action Buttons */}
                           <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
                             <a
-                              href={mat.youtubeUrl || 'https://youtube.com/@witslingoeng'}
+                              href={mat.youtubeUrl || youtubeChannelUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-600 text-red-700 hover:text-white border border-red-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Watch Video</span>
+                              <span>Test Video URL</span>
                             </a>
 
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => setEditingMaterial(mat)}
                                 className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Edit YouTube Video Details"
+                                title="Edit Video Details"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteMaterial(mat.id, mat.title)}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Delete YouTube Resource"
+                                title="Delete Video"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -3442,15 +3642,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </div>
                         </div>
                       );
-                    })
-                  ) : (
-                    <div className="col-span-3 py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                      No YouTube video lessons added yet. Click "Add YouTube Video" above to attach lessons.
-                    </div>
-                  )}
-                </div>
-              )}
-
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <Youtube className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="font-bold text-slate-700 text-sm">No video lessons found</p>
+                    <p className="text-xs text-slate-500 mt-1">Click "+ Add Video" above to add your first YouTube video lesson.</p>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}
@@ -6879,8 +7080,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </span>
                 </div>
 
-                {/* Category & Display Order */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Category, Display Order & Duration */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">Category *</label>
                     <select
@@ -6888,12 +7089,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, category: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
                     >
+                      <option value="Pronunciation & Phonics">Pronunciation & Phonics</option>
+                      <option value="Spoken English & Fluency">Spoken English & Fluency</option>
+                      <option value="Learning Mindset">Learning Mindset</option>
+                      <option value="English Foundations">English Foundations</option>
+                      <option value="Daily Motivation">Daily Motivation</option>
                       <option value="Daily English">Daily English</option>
                       <option value="Vocabulary">Vocabulary</option>
-                      <option value="Speaking Practice Conversations">Speaking Practice Conversations</option>
                       <option value="Grammar Made Easy">Grammar Made Easy</option>
-                      <option value="English Tips">English Tips</option>
-                      <option value="Interviews & Public Speaking">Interviews & Public Speaking</option>
+                      <option value="Speaking Practice">Speaking Practice</option>
                       <option value="General">General</option>
                     </select>
                   </div>
@@ -6904,6 +7108,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       min={1}
                       value={newYouTubeResource.displayOrder}
                       onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, displayOrder: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Duration (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 05:20 or 00:58"
+                      value={newYouTubeResource.duration}
+                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, duration: e.target.value })}
                       className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
                     />
                   </div>
@@ -7552,8 +7766,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </div>
 
-                    {/* Category & Display Order */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Category, Display Order & Duration */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="font-bold text-slate-700 block mb-1">Category *</label>
                         <select
@@ -7561,12 +7775,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
                           className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
                         >
+                          <option value="Pronunciation & Phonics">Pronunciation & Phonics</option>
+                          <option value="Spoken English & Fluency">Spoken English & Fluency</option>
+                          <option value="Learning Mindset">Learning Mindset</option>
+                          <option value="English Foundations">English Foundations</option>
+                          <option value="Daily Motivation">Daily Motivation</option>
                           <option value="Daily English">Daily English</option>
                           <option value="Vocabulary">Vocabulary</option>
-                          <option value="Speaking Practice Conversations">Speaking Practice Conversations</option>
                           <option value="Grammar Made Easy">Grammar Made Easy</option>
-                          <option value="English Tips">English Tips</option>
-                          <option value="Interviews & Public Speaking">Interviews & Public Speaking</option>
+                          <option value="Speaking Practice">Speaking Practice</option>
                           <option value="General">General</option>
                         </select>
                       </div>
@@ -7577,6 +7794,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           min={1}
                           value={editingMaterial.displayOrder || 1}
                           onChange={(e) => setEditingMaterial({ ...editingMaterial, displayOrder: parseInt(e.target.value) || 1 })}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Duration (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 05:20 or 00:58"
+                          value={editingMaterial.duration || ''}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, duration: e.target.value })}
                           className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
                         />
                       </div>

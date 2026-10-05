@@ -4,65 +4,17 @@ import { useScrollLock } from '../hooks/useScrollLock';
 
 interface YouTubeSectionProps {
   siteSettings?: import('../types').SiteSettings;
+  materials?: import('../types').StudyMaterial[];
 }
 
-export const YouTubeSection: React.FC<YouTubeSectionProps> = ({ siteSettings }) => {
+export const YouTubeSection: React.FC<YouTubeSectionProps> = ({ siteSettings, materials = [] }) => {
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   useScrollLock(Boolean(selectedVideo));
   const channelUrl = siteSettings?.youtubeUrl || 'https://youtube.com/@witslingoeng';
 
-  const videoCards = [
-    {
-      id: 'v1',
-      category: 'Pronunciation & Phonics',
-      title: 'Sound of C as “K” and “S” |',
-      duration: '00:58',
-      views: 'Wits Lingo',
-      description: "Master the pronunciation rules of the letter 'C' producing /k/ and /s/ sounds in spoken English.",
-      youtubeUrl: 'https://www.youtube.com/watch?v=ZFuoc6aEn3w',
-      thumbnailBg: 'from-purple-900 via-indigo-900 to-purple-950',
-    },
-    {
-      id: 'v2',
-      category: 'Spoken English & Fluency',
-      title: 'English & Society 🫣😅 | English seekhna hi padega.',
-      duration: '00:55',
-      views: 'Wits Lingo',
-      description: 'Why spoken English fluency is crucial in modern professional, social, and academic settings.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=Xk1gQdbSYic',
-      thumbnailBg: 'from-indigo-950 via-purple-900 to-slate-900',
-    },
-    {
-      id: 'v3',
-      category: 'Learning Mindset',
-      title: 'Why you can’t improve your English | listen to it carefully',
-      duration: '00:59',
-      views: 'Wits Lingo',
-      description: 'Core psychological and habit mistakes that hold back English learners from achieving natural fluency.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=mImWmss_7Gw',
-      thumbnailBg: 'from-purple-950 via-violet-900 to-purple-900',
-    },
-    {
-      id: 'v4',
-      category: 'English Foundations',
-      title: 'English Learning isn’t hard, but to choose a right way | Learn English With Wits Lingo Team',
-      duration: '00:52',
-      views: 'Wits Lingo',
-      description: 'Step-by-step guidance on choosing the right structured approach to learn English speaking effectively.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=K8PYUbGdazY',
-      thumbnailBg: 'from-slate-900 via-purple-900 to-indigo-950',
-    },
-    {
-      id: 'v5',
-      category: 'Daily Motivation',
-      title: 'Bhai, English Seekho, chahen jaha se Seekho.😅 | Wits Lingo',
-      duration: '00:48',
-      views: 'Wits Lingo',
-      description: 'Practical encouragement and motivation to build everyday English speaking habits without hesitation.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=8yfe0F74q6M',
-      thumbnailBg: 'from-purple-900 via-purple-950 to-slate-900',
-    },
-  ];
+  const videoCards = materials
+    .filter(m => (m.resourceType === 'youtube' || Boolean(m.youtubeUrl)) && m.isVisibleOnWebsite !== false && m.isPublished !== false)
+    .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
 
   return (
     <section className="py-20 bg-[#FAF8FD] border-b border-purple-100/70">

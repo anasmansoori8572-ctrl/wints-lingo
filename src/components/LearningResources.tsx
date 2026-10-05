@@ -170,65 +170,6 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
     },
   ];
 
-  // 2. Curated Video Lessons Data
-  const videoCards = [
-    {
-      id: 'v1',
-      category: 'Pronunciation & Phonics',
-      title: 'Sound of C as “K” and “S” |',
-      duration: '00:58',
-      views: 'Wits Lingo',
-      description: "Master the pronunciation rules of the letter 'C' producing /k/ and /s/ sounds in spoken English.",
-      youtubeUrl: 'https://www.youtube.com/watch?v=ZFuoc6aEn3w',
-      thumbnailUrl: 'https://img.youtube.com/vi/ZFuoc6aEn3w/hqdefault.jpg',
-      thumbnailBg: 'from-purple-900 via-indigo-900 to-purple-950',
-    },
-    {
-      id: 'v2',
-      category: 'Spoken English & Fluency',
-      title: 'English & Society 🫣😅 | English seekhna hi padega.',
-      duration: '00:55',
-      views: 'Wits Lingo',
-      description: 'Why spoken English fluency is crucial in modern professional, social, and academic settings.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=Xk1gQdbSYic',
-      thumbnailUrl: 'https://img.youtube.com/vi/Xk1gQdbSYic/hqdefault.jpg',
-      thumbnailBg: 'from-indigo-950 via-purple-900 to-slate-900',
-    },
-    {
-      id: 'v3',
-      category: 'Learning Mindset',
-      title: 'Why you can’t improve your English | listen to it carefully',
-      duration: '00:59',
-      views: 'Wits Lingo',
-      description: 'Core psychological and habit mistakes that hold back English learners from achieving natural fluency.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=mImWmss_7Gw',
-      thumbnailUrl: 'https://img.youtube.com/vi/mImWmss_7Gw/hqdefault.jpg',
-      thumbnailBg: 'from-purple-950 via-violet-900 to-purple-900',
-    },
-    {
-      id: 'v4',
-      category: 'English Foundations',
-      title: 'English Learning isn’t hard, but to choose a right way | Learn English With Wits Lingo Team',
-      duration: '00:52',
-      views: 'Wits Lingo',
-      description: 'Step-by-step guidance on choosing the right structured approach to learn English speaking effectively.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=K8PYUbGdazY',
-      thumbnailUrl: 'https://img.youtube.com/vi/K8PYUbGdazY/hqdefault.jpg',
-      thumbnailBg: 'from-slate-900 via-purple-900 to-indigo-950',
-    },
-    {
-      id: 'v5',
-      category: 'Daily Motivation',
-      title: 'Bhai, English Seekho, chahen jaha se Seekho.😅 | Wits Lingo',
-      duration: '00:48',
-      views: 'Wits Lingo',
-      description: 'Practical encouragement and motivation to build everyday English speaking habits without hesitation.',
-      youtubeUrl: 'https://www.youtube.com/watch?v=8yfe0F74q6M',
-      thumbnailUrl: 'https://img.youtube.com/vi/8yfe0F74q6M/hqdefault.jpg',
-      thumbnailBg: 'from-purple-900 via-purple-950 to-slate-900',
-    },
-  ];
-
   // 3. PDF Resources Data (Image 4)
   const defaultResources: ResourceItem[] = [
     {
@@ -350,18 +291,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
       const saved = localStorage.getItem('wits_lingo_materials');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((m: any) => {
-            if (m.resourceType === 'youtube' || m.youtubeUrl) {
-              if (m.id === 'yt-01' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=ZFuoc6aEn3w';
-              if (m.id === 'yt-02' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=Xk1gQdbSYic';
-              if (m.id === 'yt-03' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=mImWmss_7Gw';
-              if (m.id === 'yt-04' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=K8PYUbGdazY';
-              if (m.id === 'yt-05' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=8yfe0F74q6M';
-            }
-            return m;
-          });
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
     return [];
@@ -432,52 +362,35 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
     return [...visibleUploaded, ...remainingDefaults];
   }, [backendMaterials]);
 
-  // Dynamic YouTube video lessons: backend published videos first (sorted by displayOrder), fallback to curated
+  // Dynamic YouTube video lessons: purely generated from Admin-managed backendMaterials
   const displayVideos = React.useMemo(() => {
-    const backendYt = backendMaterials
+    const publishedYt = backendMaterials
       .filter(m => (m.resourceType === 'youtube' || Boolean(m.youtubeUrl)) && m.isVisibleOnWebsite !== false && m.isPublished !== false)
       .sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
 
-    if (backendYt.length > 0) {
-      return backendYt.map((v, index) => {
-        let defaultSpecificUrl = 'https://youtube.com/@witslingoeng';
-        if (v.id === 'yt-01') defaultSpecificUrl = 'https://www.youtube.com/watch?v=ZFuoc6aEn3w';
-        else if (v.id === 'yt-02') defaultSpecificUrl = 'https://www.youtube.com/watch?v=Xk1gQdbSYic';
-        else if (v.id === 'yt-03') defaultSpecificUrl = 'https://www.youtube.com/watch?v=mImWmss_7Gw';
-        else if (v.id === 'yt-04') defaultSpecificUrl = 'https://www.youtube.com/watch?v=K8PYUbGdazY';
-        else if (v.id === 'yt-05') defaultSpecificUrl = 'https://www.youtube.com/watch?v=8yfe0F74q6M';
+    return publishedYt.map((v, index) => {
+      const finalVideoUrl = v.youtubeUrl ? normalizeAndValidateYouTubeUrl(v.youtubeUrl, v.youtubeUrl) : '';
+      const thumb = v.thumbnailUrl || (finalVideoUrl ? extractYouTubeThumb(finalVideoUrl) : undefined);
 
-        const finalVideoUrl = normalizeAndValidateYouTubeUrl(v.youtubeUrl || defaultSpecificUrl, defaultSpecificUrl);
-
-        return {
-          id: v.id,
-          title: v.title,
-          category: v.category || 'English Lesson',
-          description: v.description || 'Watch interactive English video lesson on our official YouTube channel.',
-          duration: v.duration || 'Video Lesson',
-          views: v.views || 'Wits Lingo',
-          youtubeUrl: finalVideoUrl,
-          thumbnailUrl: v.thumbnailUrl || (finalVideoUrl ? extractYouTubeThumb(finalVideoUrl) : undefined),
-          thumbnailBg: [
-            'from-purple-900 via-indigo-900 to-purple-950',
-            'from-indigo-950 via-purple-900 to-slate-900',
-            'from-purple-950 via-violet-900 to-purple-900',
-            'from-slate-900 via-purple-900 to-indigo-950',
-            'from-purple-900 via-purple-950 to-slate-900'
-          ][index % 5]
-        };
-      });
-    }
-
-    return videoCards.map(v => {
-      const finalVideoUrl = normalizeAndValidateYouTubeUrl(v.youtubeUrl, 'https://youtube.com/@witslingoeng');
       return {
-        ...v,
+        id: v.id,
+        title: v.title || 'Video Lesson',
+        category: v.category || 'English Lesson',
+        description: v.description || 'Watch interactive English video lesson on our official YouTube channel.',
+        duration: v.duration || '',
+        views: v.views || 'Wits Lingo',
         youtubeUrl: finalVideoUrl,
-        thumbnailUrl: v.thumbnailUrl || (finalVideoUrl ? extractYouTubeThumb(finalVideoUrl) : undefined)
+        thumbnailUrl: thumb,
+        thumbnailBg: [
+          'from-purple-900 via-indigo-900 to-purple-950',
+          'from-indigo-950 via-purple-900 to-slate-900',
+          'from-purple-950 via-violet-900 to-purple-900',
+          'from-slate-900 via-purple-900 to-indigo-950',
+          'from-purple-900 via-purple-950 to-slate-900'
+        ][index % 5]
       };
     });
-  }, [backendMaterials, youtubeUrl]);
+  }, [backendMaterials]);
 
   const categories = [
     'All',
@@ -704,12 +617,12 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                 </div>
 
                 <a
-                  href="https://youtube.com/@witslingoeng"
+                  href={youtubeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.open('https://youtube.com/@witslingoeng', '_blank', 'noopener,noreferrer');
+                    window.open(youtubeUrl, '_blank', 'noopener,noreferrer');
                   }}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-red-600/25 transition-all self-start lg:self-auto cursor-pointer"
                 >
@@ -723,19 +636,19 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
               {displayVideos.length === 0 ? (
                 <div className="text-center py-12 px-4 bg-white rounded-2xl border border-dashed border-purple-200">
                   <Youtube className="w-12 h-12 text-red-500/60 mx-auto mb-3" />
-                  <h4 className="font-['Outfit'] font-bold text-slate-800 text-base mb-1">New Video Lessons Coming Soon</h4>
+                  <h4 className="font-['Outfit'] font-bold text-slate-800 text-base mb-1">Video lessons coming soon</h4>
                   <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-4">
                     Subscribe to the official Wits Lingo YouTube channel to get notified when new spoken English lessons and dialogues are published.
                   </p>
                   <a
-                    href="https://youtube.com/@witslingoeng"
+                    href={youtubeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => {
                       e.preventDefault();
-                      window.open('https://youtube.com/@witslingoeng', '_blank', 'noopener,noreferrer');
+                      window.open(youtubeUrl, '_blank', 'noopener,noreferrer');
                     }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow transition-all"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow transition-all cursor-pointer"
                   >
                     <Youtube className="w-4 h-4 fill-white" />
                     <span>Visit Official YouTube Channel</span>

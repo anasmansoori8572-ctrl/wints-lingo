@@ -28,7 +28,7 @@ import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
 
-type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
 
 function parseAdminSubroute(path: string, hash: string): AdminTabType | undefined {
   const p = path.toLowerCase();
@@ -40,6 +40,7 @@ function parseAdminSubroute(path: string, hash: string): AdminTabType | undefine
   if (sub === 'batches') return 'batches';
   if (sub === 'students' || sub === 'admissions') return 'students';
   if (sub === 'resources' || sub === 'materials' || sub === 'notes' || sub === 'pdfs') return 'materials';
+  if (sub === 'youtube' || sub === 'youtube-lessons' || sub === 'video-lessons' || sub === 'videos') return 'youtube-lessons';
   if (sub === 'gallery') return 'gallery';
   if (sub === 'hero-video' || sub === 'video') return 'hero-video';
   if (sub === 'classes') return 'classes';
@@ -178,18 +179,7 @@ export default function App() {
       const saved = localStorage.getItem('wits_lingo_materials');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((m: any) => {
-            if (m.resourceType === 'youtube' || m.youtubeUrl) {
-              if (m.id === 'yt-01' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=ZFuoc6aEn3w';
-              if (m.id === 'yt-02' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=Xk1gQdbSYic';
-              if (m.id === 'yt-03' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=mImWmss_7Gw';
-              if (m.id === 'yt-04' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=K8PYUbGdazY';
-              if (m.id === 'yt-05' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=8yfe0F74q6M';
-            }
-            return m;
-          });
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
     return [];

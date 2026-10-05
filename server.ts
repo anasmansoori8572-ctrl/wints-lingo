@@ -1396,6 +1396,9 @@ let cmsContent: any = {
   announcementText: "New Batch Starts from 1st of each month • Admissions Open for October & November 2026",
   announcementBtnText: "",
   showAnnouncement: true,
+  settings: {
+    youtubeUrl: "https://www.youtube.com/@witslingoeng"
+  },
   phoneNumbers: ["7310952271", "8791287575"],
   email: "Witslingo@gmail.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
@@ -1877,7 +1880,9 @@ function loadAllPersistedData(): void {
             }
           }
           for (const m of data) {
-            if (!m.downloadUrl || m.downloadUrl === "#") {
+            if (m.resourceType === "youtube" || m.fileType === "youtube") {
+              if (!m.downloadUrl && m.youtubeUrl) m.downloadUrl = m.youtubeUrl;
+            } else if (!m.downloadUrl || m.downloadUrl === "#") {
               m.downloadUrl = `/api/files/download/${m.id}`;
             }
           }
@@ -5320,6 +5325,7 @@ www.witslingo.com`
       cmsContent.settings = { ...cmsContent.settings, ...settings };
     }
 
+    saveCmsContent();
     res.json({ success: true, content: cmsContent });
   });
 
