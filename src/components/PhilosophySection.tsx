@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, CheckCircle2, Award, Sparkles, MessageCircle, Volume2, UserCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 
 export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ onOpenAdmission }) => {
   const [activeStep, setActiveStep] = useState(2);
@@ -53,50 +53,50 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
   ];
 
   return (
-    <section id="philosophy" className="py-20 bg-gradient-to-b from-white via-purple-50/40 to-white border-y border-purple-100/70">
+    <section id="philosophy" className="py-20 sm:py-24 bg-gradient-to-b from-white via-purple-50/30 to-white border-b border-slate-200/70">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="max-w-3xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 border border-purple-200 text-xs font-bold text-[#4A1D96] uppercase tracking-wider">
+        <div className="max-w-3xl mx-auto text-center space-y-3.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200/80 text-xs font-bold text-[#4A1D96] uppercase tracking-wider shadow-2xs">
             Learning Philosophy
           </div>
-          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight">
+          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-[2.65rem] font-extrabold text-[#1E1B26] tracking-tight leading-tight">
             We Don't Just Teach English. We Help You Use It.
           </h2>
-          <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+          <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
             At Wits Lingo, learning English is not an academic chore of memorising rigid rules. We guide you step-by-step through a natural spoken progression from day one.
           </p>
         </div>
 
         {/* Visual Progress Pathway: Beginner → Confident Speaker */}
-        <div className="mt-14 max-w-4xl mx-auto bg-white rounded-2xl p-6 sm:p-8 border border-purple-100 shadow-md shadow-purple-950/5">
-          <div className="flex flex-col sm:flex-row items-center justify-between pb-6 border-b border-slate-100 gap-4">
+        <div className="mt-14 sm:mt-16 max-w-4xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md shadow-purple-950/5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 border-b border-slate-100 gap-4">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Visual Learning Pathway</span>
-              <h3 className="font-['Outfit'] text-xl font-bold text-[#1E1B26]">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Visual Learning Pathway</span>
+              <h3 className="font-['Outfit'] text-xl sm:text-2xl font-bold text-[#1E1B26] mt-0.5">
                 Beginner <span className="text-[#4A1D96]">→</span> Confident Speaker
               </h3>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80">
                 5 Practical Stages
               </span>
             </div>
           </div>
 
           {/* Stepper Buttons Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 mt-6">
             {steps.map((step, idx) => (
               <button
                 key={step.number}
                 onClick={() => setActiveStep(idx)}
-                className={`p-3 rounded-xl text-left transition-all cursor-pointer border ${
+                className={`p-3 rounded-2xl text-left transition-all cursor-pointer border ${
                   idx === 4 ? 'col-span-2 sm:col-span-1' : ''
                 } ${
                   activeStep === idx
                     ? 'bg-[#4A1D96] text-white border-[#4A1D96] shadow-md shadow-purple-950/20'
-                    : 'bg-slate-50 hover:bg-purple-50 text-slate-700 border-slate-200/80'
+                    : 'bg-slate-50/80 hover:bg-purple-50/60 text-slate-700 border-slate-200/80'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -111,7 +111,7 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
           </div>
 
           {/* Active Step Showcase Card */}
-          <div className="mt-6 p-4 sm:p-6 rounded-2xl bg-purple-50/50 border border-purple-100/90 grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 items-center">
+          <div className="mt-6 p-5 sm:p-7 rounded-2xl bg-purple-50/40 border border-purple-100/90 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
             <div className="md:col-span-8 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-white bg-[#581C87] px-2.5 py-0.5 rounded-md">
@@ -127,14 +127,14 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
               <p className="text-sm text-slate-600 leading-relaxed">
                 {steps[activeStep].detailedGoal}
               </p>
-              <div className="p-3 bg-white rounded-xl border border-purple-100 text-xs space-y-1">
+              <div className="p-3.5 bg-white rounded-xl border border-purple-100 text-xs space-y-1 shadow-2xs">
                 <span className="font-bold text-slate-700 block">Typical Practice In Class:</span>
                 <span className="text-purple-900 font-medium italic">{steps[activeStep].example}</span>
               </div>
             </div>
 
-            <div className="md:col-span-4 bg-white p-5 rounded-xl border border-purple-100 text-center space-y-3 shadow-xs">
-              <div className="w-12 h-12 mx-auto rounded-full bg-purple-100 text-[#4A1D96] flex items-center justify-center font-bold text-lg">
+            <div className="md:col-span-4 bg-white p-5 rounded-2xl border border-purple-100 text-center space-y-3.5 shadow-xs">
+              <div className="w-12 h-12 mx-auto rounded-xl bg-purple-100 text-[#4A1D96] flex items-center justify-center font-bold text-lg shadow-2xs">
                 0{activeStep + 1}
               </div>
               <div>
@@ -145,7 +145,7 @@ export const PhilosophySection: React.FC<{ onOpenAdmission: () => void }> = ({ o
               </div>
               <button
                 onClick={onOpenAdmission}
-                className="w-full py-2 px-3 rounded-lg bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 Join Next Batch
               </button>

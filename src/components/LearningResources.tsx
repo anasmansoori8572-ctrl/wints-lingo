@@ -404,40 +404,40 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
   return (
     <section 
       id="learning-resources" 
-      className="py-20 bg-gradient-to-b from-white via-[#FAF9FC] to-white border-b border-purple-100/70 relative scroll-mt-16"
+      className="py-20 sm:py-24 bg-gradient-to-b from-white via-[#FAF9FC] to-white border-b border-slate-200/70 relative scroll-mt-16"
     >
       {/* Anchor aliases for backward compatibility */}
       <div id="resources" className="absolute -top-20" />
       <div id="digital-learning" className="absolute -top-20" />
       <div id="learn" className="absolute -top-20" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-16">
         
         {/* ==================================================================== */}
         {/* MAIN SECTION HEADER */}
         {/* ==================================================================== */}
-        <div className="max-w-3xl mx-auto text-center space-y-3">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-purple-100 text-[#4A1D96] text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
+        <div className="max-w-3xl mx-auto text-center space-y-3.5">
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-purple-50 border border-purple-200/80 text-[#4A1D96] text-xs font-bold uppercase tracking-wider shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
             <span>Digital Reach & Academy Knowledge Bank</span>
           </div>
-          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#1E1B26] tracking-tight">
+          <h2 className="font-['Outfit'] text-3xl sm:text-4xl lg:text-[2.65rem] font-extrabold text-[#1E1B26] tracking-tight">
             Learning Resources
           </h2>
-          <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
+          <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
             All your spoken English tools united in one optimized hub — explore free video lessons, interactive channels, and view-only study handbooks.
           </p>
 
           {/* ==================================================================== */}
           {/* OPTIMIZED VIEW SWITCHER / TABS */}
           {/* ==================================================================== */}
-          <div className="pt-5 flex items-center justify-start sm:justify-center overflow-x-auto max-w-full pb-2 sm:pb-0 gap-2">
+          <div className="pt-6 flex items-center justify-start sm:justify-center overflow-x-auto max-w-full pb-2 sm:pb-0 gap-2">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'all'
-                  ? 'bg-[#4A1D96] text-white shadow-md shadow-purple-900/20 scale-102'
-                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200/80'
+                  ? 'bg-[#4A1D96] text-white shadow-sm shadow-purple-900/20'
+                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
               }`}
             >
               <Layers className="w-4 h-4" />
@@ -446,15 +446,15 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
             <button
               onClick={() => setActiveTab('materials')}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'materials'
-                  ? 'bg-[#4A1D96] text-white shadow-md shadow-purple-900/20 scale-102'
-                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200/80'
+                  ? 'bg-[#4A1D96] text-white shadow-sm shadow-purple-900/20'
+                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
               }`}
             >
               <FileText className="w-4 h-4" />
               <span>Study Guides & PDFs</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                 activeTab === 'materials' ? 'bg-white/20 text-white' : 'bg-purple-100 text-[#4A1D96]'
               }`}>
                 {resources.length}
@@ -463,15 +463,15 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
             <button
               onClick={() => setActiveTab('videos')}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'videos'
-                  ? 'bg-[#4A1D96] text-white shadow-md shadow-purple-900/20 scale-102'
-                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200/80'
+                  ? 'bg-[#4A1D96] text-white shadow-sm shadow-purple-900/20'
+                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
               }`}
             >
               <Youtube className="w-4 h-4 text-red-500" />
               <span>Video Lessons</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                 activeTab === 'videos' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
               }`}>
                 5
@@ -480,15 +480,15 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
             <button
               onClick={() => setActiveTab('channels')}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap flex-shrink-0 ${
                 activeTab === 'channels'
-                  ? 'bg-[#4A1D96] text-white shadow-md shadow-purple-900/20 scale-102'
-                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200/80'
+                  ? 'bg-[#4A1D96] text-white shadow-sm shadow-purple-900/20'
+                  : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
               }`}
             >
               <Laptop className="w-4 h-4" />
               <span>Digital Reach Channels</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                 activeTab === 'channels' ? 'bg-white/20 text-white' : 'bg-purple-100 text-[#4A1D96]'
               }`}>
                 6
@@ -498,11 +498,11 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
         </div>
 
         {/* ==================================================================== */}
-        {/* SUBSECTION 1: DIGITAL REACH CHANNELS (Image 2 & 5) */}
+        {/* SUBSECTION 1: DIGITAL REACH CHANNELS */}
         {/* ==================================================================== */}
         {(activeTab === 'all' || activeTab === 'channels') && (
           <div id="digital-channels-hub" className="space-y-6 pt-2">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-purple-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-200/80 pb-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-widest text-[#581C87]">
                   Flexible Digital Reach
@@ -526,14 +526,14 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                     onClick={() => handleChannelClick(ch)}
                     role="button"
                     tabIndex={0}
-                    className="group bg-white rounded-2xl p-6 border border-slate-200/80 hover:border-purple-300 shadow-xs hover:shadow-lg transition-all duration-300 text-left flex flex-col justify-between cursor-pointer transform hover:-translate-y-1"
+                    className="group bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 hover:border-purple-300 shadow-xs hover:shadow-lg hover:shadow-purple-950/5 transition-all duration-300 text-left flex flex-col justify-between cursor-pointer transform hover:-translate-y-1"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <div className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all ${ch.color}`}>
+                        <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-all ${ch.color} shadow-2xs`}>
                           <Icon className="w-6 h-6" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 group-hover:bg-purple-100 group-hover:text-purple-900 transition-colors">
+                        <span className="text-[11px] font-bold uppercase tracking-wide px-3 py-1 rounded-full bg-slate-100 text-slate-700 group-hover:bg-purple-100 group-hover:text-purple-900 transition-colors">
                           {ch.badge}
                         </span>
                       </div>
@@ -562,11 +562,11 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* SUBSECTION 2: OFFICIAL VIDEO CHANNEL (Image 3) */}
+        {/* SUBSECTION 2: OFFICIAL VIDEO CHANNEL */}
         {/* ==================================================================== */}
         {(activeTab === 'all' || activeTab === 'videos') && (
           <div id="video-lessons-hub" className="space-y-6 pt-6">
-            <div className="bg-[#FAF8FD] rounded-3xl p-6 sm:p-8 border border-purple-100/90 shadow-xs">
+            <div className="bg-[#FAF8FD] rounded-3xl p-6 sm:p-9 border border-purple-100/90 shadow-xs">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">
@@ -594,12 +594,12 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
               </div>
 
               {/* Curated Video Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4.5">
                 {videoCards.map((video) => (
                   <div
                     key={video.id}
                     onClick={() => setSelectedVideo(video.title)}
-                    className="group bg-white rounded-2xl p-4 border border-purple-100/80 hover:border-purple-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+                    className="group bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-purple-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
                   >
                     <div className="space-y-3">
                       {/* Video Thumbnail Mock */}
@@ -648,11 +648,11 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* SUBSECTION 3: PDF STUDY GUIDES & KNOWLEDGE BANK (Image 4) */}
+        {/* SUBSECTION 3: PDF STUDY GUIDES & KNOWLEDGE BANK */}
         {/* ==================================================================== */}
         {(activeTab === 'all' || activeTab === 'materials') && (
           <div id="study-materials-bank" className="space-y-6 pt-6">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-purple-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-200/80 pb-4">
               <div>
                 <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#581C87] mb-1">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -676,7 +676,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                   placeholder="Search vocabulary, grammar guides, conversation scripts, worksheets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 focus:outline-none focus:border-[#4A1D96] focus:ring-2 focus:ring-purple-100 text-sm text-slate-800 shadow-xs transition-all"
+                  className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 focus:outline-none focus:border-[#4A1D96] focus:ring-2 focus:ring-purple-500/15 text-sm text-slate-800 shadow-xs transition-all"
                 />
               </div>
 
@@ -686,10 +686,10 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                       selectedCategory === cat
-                        ? 'bg-[#4A1D96] text-white shadow-xs'
-                        : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-purple-900 border border-slate-200/70'
+                        ? 'bg-[#4A1D96] text-white shadow-2xs'
+                        : 'bg-white text-slate-600 hover:bg-purple-50 hover:text-purple-900 border border-slate-200/80'
                     }`}
                   >
                     {cat}
@@ -700,7 +700,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
 
             {/* Resources Grid */}
             {filteredResources.length === 0 ? (
-              <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-purple-200 p-8 space-y-3 shadow-xs">
+              <div className="col-span-full py-12 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 space-y-3 shadow-xs">
                 <FileText className="w-10 h-10 text-purple-300 mx-auto" />
                 <p className="font-bold text-slate-800 text-base">No study materials found</p>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
@@ -719,11 +719,11 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                 {filteredResources.map((res) => (
                   <div
                     key={res.id}
-                    className="bg-white hover:bg-[#FAF9FC] rounded-2xl p-5 border border-purple-100/90 hover:border-purple-300 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group relative"
+                    className="bg-white hover:bg-[#FAF9FC] rounded-3xl p-5.5 border border-slate-200/80 hover:border-purple-300 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group relative"
                   >
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-1 flex-wrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-200">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-900 border border-purple-200">
                           {res.category}
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -766,7 +766,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
                       <button
                         type="button"
                         onClick={() => setViewingResource(res)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-50 group-hover:bg-[#4A1D96] text-[#4A1D96] group-hover:text-white text-xs font-bold border border-purple-200 group-hover:border-[#4A1D96] transition-all shadow-xs cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-50 group-hover:bg-[#4A1D96] text-[#4A1D96] group-hover:text-white text-xs font-bold border border-purple-200 group-hover:border-[#4A1D96] transition-all shadow-2xs cursor-pointer"
                         title="Read in Protected View-Only Reader"
                       >
                         <Eye className="w-3.5 h-3.5" />
@@ -874,7 +874,7 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
           category={viewingResource.category}
           description={viewingResource.description}
           studentName="Wits Lingo Learner"
-          allowDownload={false}
+          allowDownload={Boolean(viewingResource.allowDownload)}
         />
       )}
 

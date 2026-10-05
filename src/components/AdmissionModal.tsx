@@ -290,6 +290,21 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
     }
   };
 
+  // Dynamically load Razorpay SDK
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   // Process Final Payment & Issue Admission
   const handleProcessPayment = async (overrideMethod?: string) => {
     setLoading(true);
@@ -329,7 +344,155 @@ export const AdmissionModal: React.FC<AdmissionModalProps> = ({
         }
       }
 
-      // Determine or format transaction reference ID
+      // 1. Try Razorpay Order Creation if online payment selected
+      let isRazorpayHandled = false;
+      try {
+        const orderRes = await fetch('/api/payments/razorpay/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourse.id,
+            batchId: selectedBatch.id,
+            studentName: formData.name,
+            studentEmail: formData.email,
+            studentPhone: `${phoneCountry.dialCode} ${phoneDigits}`
+          })
+        });
+
+        const orderData = await orderRes.json();
+
+        if (orderRes.ok && orderData.success && orderData.orderId) {
+          const scriptLoaded = await loadRazorpayScript();
+          if (scriptLoaded && (window as any).Razorpay) {
+            isRazorpayHandled = true;
+
+            const rzpOptions = {
+              key: orderData.keyId,
+              amount: orderData.amount,
+              currency: orderData.currency || 'INR',
+              name: 'WITS LINGO',
+              description: `${selectedCourse.name} — ${selectedBatch.name}`,
+              image: '/video/wits-logo.png',
+              order_id: orderData.orderId,
+              prefill: {
+                name: formData.name,
+                email: formData.email,
+                contact: `${phoneCountry.dialCode}${phoneDigits}`
+              },
+              notes: {
+                courseId: selectedCourse.id,
+                batchId: selectedBatch.id,
+                studentName: formData.name
+              },
+              theme: {
+                color: '#4A1D96'
+              },
+              handler: async (response: any) => {
+                setLoading(true);
+                try {
+                  const verifyRes = await fetch('/api/payments/razorpay/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      razorpayOrderId: response.razorpay_order_id,
+                      razorpayPaymentId: response.razorpay_payment_id,
+                      razorpaySignature: response.razorpay_signature,
+                      name: formData.name,
+                      fatherName: formData.fatherName,
+                      dob: formData.dob,
+                      gender: formData.gender,
+                      country: formData.country,
+                      district: formData.district,
+                      state: formData.state,
+                      pincode: formData.pincode,
+                      phone: `${phoneCountry.dialCode} ${phoneDigits}`,
+                      phoneCountryCode: phoneCountry.dialCode,
+                      whatsapp: `${whatsappCountry.dialCode} ${whatsappDigits}`,
+                      whatsappCountryCode: whatsappCountry.dialCode,
+                      email: formData.email,
+                      address: formData.address,
+                      qualification: formData.qualification,
+                      currentEnglishLevel: formData.currentEnglishLevel,
+                      courseId: selectedCourse.id,
+                      batchId: selectedBatch.id,
+                      studentPassword: formData.portalPassword
+                    })
+                  });
+
+                  const verifyData = await verifyRes.json();
+                  if (!verifyRes.ok || !verifyData.success) {
+                    throw new Error(verifyData.error || 'Payment signature verification failed.');
+                  }
+
+                  const slipData: AdmissionSlipData = {
+                    admissionId: verifyData.admissionId,
+                    name: formData.name,
+                    fatherName: formData.fatherName,
+                    dob: formData.dob,
+                    gender: formData.gender,
+                    phone: `${phoneCountry.dialCode} ${phoneDigits}`,
+                    whatsapp: `${whatsappCountry.dialCode} ${whatsappDigits}`,
+                    email: formData.email,
+                    country: formData.country,
+                    state: formData.state,
+                    district: formData.district,
+                    pincode: formData.pincode,
+                    address: formData.address,
+                    courseName: selectedCourse.name,
+                    batchName: selectedBatch.name,
+                    batchCode: selectedBatch.batchCode,
+                    batchTiming: selectedBatch.scheduleTime,
+                    paymentMethod: 'Razorpay Verified',
+                    formattedAmount: formattedFeeString,
+                    txnId: response.razorpay_payment_id,
+                    feeAmount: feeAmount,
+                    paymentStatus: 'Confirmed & Paid',
+                    registeredAt: new Date().toISOString(),
+                    username: verifyData.credentials?.username || formData.email,
+                    password: verifyData.credentials?.password || formData.portalPassword || 'WitsLingo@2026',
+                    whatsappConfirmationMessage: verifyData.whatsapp?.confirmationMessage,
+                    whatsappStudentUrl: verifyData.whatsapp?.studentUrl,
+                    whatsappAdminUrl: verifyData.whatsapp?.adminUrl
+                  };
+
+                  setConfirmedSlip(slipData);
+                  try {
+                    localStorage.setItem('wits_lingo_last_slip', JSON.stringify(slipData));
+                    localStorage.setItem('wits_lingo_user', JSON.stringify(verifyData.user));
+                    localStorage.setItem('wits_lingo_token', verifyData.token);
+                  } catch (e) {}
+
+                  playSubtleNotificationSound();
+                  onAdmissionSuccess(verifyData.user, verifyData.token);
+                } catch (verifyErr: any) {
+                  setErrorMsg(verifyErr.message || 'Payment verification failed.');
+                } finally {
+                  setLoading(false);
+                }
+              },
+              modal: {
+                ondismiss: () => {
+                  setLoading(false);
+                }
+              }
+            };
+
+            const rzp = new (window as any).Razorpay(rzpOptions);
+            rzp.on('payment.failed', (resp: any) => {
+              setErrorMsg(resp.error?.description || 'Payment was declined or failed.');
+              setLoading(false);
+            });
+            rzp.open();
+            return;
+          }
+        }
+      } catch (rzpErr) {
+        console.log('[Razorpay] Proceeding with standard admission dispatch:', rzpErr);
+      }
+
+      if (isRazorpayHandled) return;
+
+      // 2. Direct / Offline / UTR Fallback Admission
       let txnId = customUtr.trim();
       if (!txnId) {
         if (paymentTab === 'upi') {

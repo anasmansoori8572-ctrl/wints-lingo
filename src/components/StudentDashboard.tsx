@@ -638,21 +638,45 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     <div className="overflow-hidden">
                       <div className="flex items-center gap-2 mb-0.5">
                         <h5 className="font-bold text-slate-800 truncate">{mat.title}</h5>
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 flex items-center gap-0.5 flex-shrink-0">
-                          <Lock className="w-2 h-2" />
-                          <span>View-Only</span>
-                        </span>
+                        {mat.allowDownload ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 flex items-center gap-0.5 flex-shrink-0">
+                            <Download className="w-2 h-2" />
+                            <span>Downloadable</span>
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 flex items-center gap-0.5 flex-shrink-0">
+                            <Lock className="w-2 h-2" />
+                            <span>View-Only</span>
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-400">{mat.fileSize} • {mat.uploadedDate || mat.uploadedAt}</span>
                     </div>
-                    <button
-                      onClick={() => setViewingMaterial(mat)}
-                      className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 hover:border-[#4A1D96] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer flex-shrink-0"
-                      title="Read in Protected View-Only Reader"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View PDF</span>
-                    </button>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => setViewingMaterial(mat)}
+                        className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 hover:border-[#4A1D96] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        title="Read in Protected View-Only Reader"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View PDF</span>
+                      </button>
+
+                      {mat.allowDownload && (
+                        <a
+                          href={`${mat.downloadUrl && mat.downloadUrl !== '#' ? mat.downloadUrl : `/api/files/download/${mat.id}`}?token=${encodeURIComponent(token)}`}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="Download PDF File"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Download</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )))}
               </div>
@@ -748,7 +772,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           batchName={batches.find(b => b.id === selectedBatchId)?.name || 'Spoken English Batch'}
           studentName={currentUser.name}
           description={viewingMaterial.description}
-          allowDownload={false}
+          allowDownload={Boolean(viewingMaterial.allowDownload)}
         />
       )}
 

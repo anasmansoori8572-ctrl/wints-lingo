@@ -126,7 +126,7 @@ async function uploadBufferToB2(
   fileName: string,
   buffer: Buffer,
   mimeType: string = "application/pdf"
-): Promise<{ success: boolean; url?: string; fileId?: string; error?: string }> {
+): Promise<{ success: boolean; url?: string; fileId?: string; fileName?: string; error?: string }> {
   // 1. Try B2 Native API (Full support for Master Keys & App Keys)
   const b2 = await getB2NativeAuth();
   if (b2 && b2.bucketId) {
@@ -180,6 +180,7 @@ async function uploadBufferToB2(
           return {
             success: true,
             fileId: uploadResult.fileId,
+            fileName: fileName,
             url: directDownloadUrl,
           };
         }
@@ -203,6 +204,7 @@ async function uploadBufferToB2(
       );
       return {
         success: true,
+        fileName: fileName,
         url: `https://${s3Config.bucket}.${s3Config.cleanEndpoint}/${fileName}`,
       };
     } catch (s3Err: any) {
@@ -212,6 +214,138 @@ async function uploadBufferToB2(
   }
 
   return { success: false, error: "Backblaze B2 not reachable or credentials invalid." };
+}
+
+async function downloadBufferFromB2(
+  fileId?: string,
+  fileName?: string
+): Promise<{ success: boolean; buffer?: Buffer; contentType?: string; contentLength?: number; error?: string }> {
+  const b2 = await getB2NativeAuth();
+  if (b2) {
+    try {
+      if (fileId) {
+        const res = await fetch(`${b2.downloadUrl}/b2api/v3/b2_download_file_by_id?fileId=${encodeURIComponent(fileId)}`, {
+          headers: { Authorization: b2.authorizationToken }
+        });
+        if (res.ok) {
+          const contentType = res.headers.get("content-type") || "application/pdf";
+          const arrayBuf = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          return {
+            success: true,
+            buffer,
+            contentType,
+            contentLength: buffer.length
+          };
+        }
+      }
+
+      if (fileName) {
+        const cleanName = fileName.replace(/^\/+/, "");
+        const res = await fetch(`${b2.downloadUrl}/file/${b2.bucketName}/${encodeURIComponent(cleanName)}`, {
+          headers: { Authorization: b2.authorizationToken }
+        });
+        if (res.ok) {
+          const contentType = res.headers.get("content-type") || "application/pdf";
+          const arrayBuf = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuf);
+          return {
+            success: true,
+            buffer,
+            contentType,
+            contentLength: buffer.length
+          };
+        }
+      }
+    } catch (nativeErr: any) {
+      console.warn("B2 download attempt failed:", nativeErr?.message);
+    }
+  }
+
+  // Fallback: S3 GetObject
+  const s3Config = getBackblazeConfig();
+  if (s3Config && fileName) {
+    try {
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const s3Res = await s3Config.client.send(
+        new GetObjectCommand({
+          Bucket: s3Config.bucket,
+          Key: fileName,
+        })
+      );
+      if (s3Res.Body) {
+        const chunks: any[] = [];
+        for await (const chunk of (s3Res.Body as any)) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        return {
+          success: true,
+          buffer,
+          contentType: s3Res.ContentType || "application/pdf",
+          contentLength: buffer.length
+        };
+      }
+    } catch (s3Err: any) {
+      console.warn("S3 GetObject failed:", s3Err?.message);
+    }
+  }
+
+  return { success: false, error: "File not found on Backblaze B2" };
+}
+
+async function deleteFileFromB2(fileId?: string, fileName?: string): Promise<{ success: boolean; error?: string }> {
+  if (!fileId && !fileName) return { success: false, error: "No file identifiers provided" };
+  const b2 = await getB2NativeAuth();
+  if (b2 && fileId && fileName) {
+    try {
+      const delRes = await fetch(`${b2.apiUrl}/b2api/v3/b2_delete_file_version`, {
+        method: "POST",
+        headers: { Authorization: b2.authorizationToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId, fileName }),
+      });
+      if (delRes.ok) {
+        return { success: true };
+      }
+    } catch (e: any) {
+      console.warn("B2 delete failed:", e?.message);
+    }
+  }
+
+  const s3Config = getBackblazeConfig();
+  if (s3Config && fileName) {
+    try {
+      const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+      await s3Config.client.send(
+        new DeleteObjectCommand({
+          Bucket: s3Config.bucket,
+          Key: fileName,
+        })
+      );
+      return { success: true };
+    } catch (e: any) {
+      console.warn("S3 Delete failed:", e?.message);
+    }
+  }
+
+  return { success: false, error: "Could not delete file from Backblaze B2" };
+}
+
+const ALLOWED_MATERIAL_EXTS = new Set([".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".epub", ".zip"]);
+const FORBIDDEN_EXEC_EXTS = new Set([".exe", ".sh", ".bat", ".cmd", ".js", ".ts", ".vbs", ".msi", ".jar", ".py", ".bin"]);
+
+function getSafeFileMimeType(filename: string, providedMime?: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".pdf") return "application/pdf";
+  if (ext === ".doc") return "application/msword";
+  if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === ".txt") return "text/plain";
+  if (ext === ".ppt") return "application/vnd.ms-powerpoint";
+  if (ext === ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (ext === ".epub") return "application/epub+zip";
+  if (ext === ".zip") return "application/zip";
+  if (providedMime && providedMime.includes("/")) return providedMime;
+  return "application/octet-stream";
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "witslingo_academy_secure_signing_key_2026";
@@ -256,10 +390,39 @@ interface DBStudentRegistration {
   paymentCurrency?: string;
   paymentAmountFormatted?: string;
   paymentTxnId: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
+  googleMeetLink?: string;
+  whatsappDeliveryStatus?: "pending" | "sent" | "failed";
+  whatsappMessageId?: string;
   registeredAt: string;
   whatsappConfirmationMessage?: string;
   whatsappStudentUrl?: string;
   whatsappAdminUrl?: string;
+}
+
+interface DBPayment {
+  id: string;
+  orderId: string;
+  paymentId: string;
+  signature?: string;
+  amount: number;
+  currency: string;
+  status: "Paid" | "Failed" | "Refunded";
+  studentName: string;
+  studentEmail: string;
+  studentPhone: string;
+  courseId: string;
+  courseName: string;
+  batchId: string;
+  batchName: string;
+  admissionId: string;
+  method: string;
+  createdAt: string;
+  verifiedAt?: string;
+  source: "razorpay_verify" | "razorpay_webhook";
+  rawPayload?: any;
 }
 
 interface DBBatch {
@@ -274,10 +437,13 @@ interface DBBatch {
   scheduleTime: string;
   maxStudents: number;
   currentStudentsCount: number;
+  enrolledCount?: number;
+  maxCapacity?: number;
   status: "Active" | "Upcoming" | "Completed" | "Archived";
   recordingsExpiryDate?: string;
   description?: string;
   isVisibleOnWebsite?: boolean;
+  googleMeetLink?: string;
 }
 
 interface DBClass {
@@ -321,16 +487,20 @@ interface DBStudyMaterial {
   classId?: string;
   title: string;
   description: string;
-  fileType: "pdf" | "doc" | "notes";
+  fileType: "pdf" | "doc" | "notes" | string;
   fileSize: string;
   downloadUrl: string;
   pdfUrl?: string;
+  b2FileId?: string;
+  b2FileName?: string;
+  mimeType?: string;
   isViewOnly?: boolean;
   allowDownload?: boolean;
   isVisibleOnWebsite?: boolean;
   category?: string;
   level?: string;
   uploadedAt: string;
+  uploadedDate?: string;
 }
 
 interface DBAssignment {
@@ -384,6 +554,22 @@ interface DBAttendance {
   durationMinutes: number;
   status: "Present" | "Late" | "Absent";
   date: string;
+}
+
+interface DBGalleryItem {
+  id: string;
+  title?: string;
+  caption?: string;
+  category?: string;
+  imageUrl: string;
+  thumbnailUrl?: string;
+  b2FileId?: string;
+  b2FileName?: string;
+  isPublished: boolean;
+  displayOrder: number;
+  uploadedAt: string;
+  uploadedBy?: string;
+  fileSize?: string;
 }
 
 // Initial Data
@@ -836,10 +1022,13 @@ const studyMaterials: DBStudyMaterial[] = [
     description: "Detailed breakdown of introducing yourself in interviews, meetings, and casual gatherings with audio phonetic hints.",
     fileType: "pdf",
     fileSize: "2.4 MB",
-    downloadUrl: "#",
+    downloadUrl: "/api/files/download/mat-01",
     pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
     isViewOnly: true,
     allowDownload: false,
+    isVisibleOnWebsite: true,
+    category: "Guides & Scripts",
+    level: "All Levels",
     uploadedAt: "10 Sept 2026"
   },
   {
@@ -850,10 +1039,13 @@ const studyMaterials: DBStudyMaterial[] = [
     description: "Natural everyday expressions with Hindi translation and pronunciation guide.",
     fileType: "pdf",
     fileSize: "3.1 MB",
-    downloadUrl: "#",
+    downloadUrl: "/api/files/download/mat-02",
     pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
     isViewOnly: true,
     allowDownload: false,
+    isVisibleOnWebsite: true,
+    category: "Worksheets",
+    level: "Beginner to Intermediate",
     uploadedAt: "12 Sept 2026"
   },
   {
@@ -864,10 +1056,13 @@ const studyMaterials: DBStudyMaterial[] = [
     description: "Visual mouth diagrams for mastering challenging English consonant sounds.",
     fileType: "pdf",
     fileSize: "4.8 MB",
-    downloadUrl: "#",
+    downloadUrl: "/api/files/download/mat-03",
     pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
     isViewOnly: true,
     allowDownload: false,
+    isVisibleOnWebsite: true,
+    category: "Pronunciation",
+    level: "All Levels",
     uploadedAt: "16 Sept 2026"
   },
   {
@@ -878,51 +1073,16 @@ const studyMaterials: DBStudyMaterial[] = [
     description: "Foundational phonics workbook with practice exercises.",
     fileType: "pdf",
     fileSize: "1.9 MB",
-    downloadUrl: "#",
+    downloadUrl: "/api/files/download/mat-fd-01",
     pdfUrl: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/preview",
     isViewOnly: true,
     allowDownload: false,
+    isVisibleOnWebsite: true,
+    category: "Foundation & Phonics",
+    level: "Beginner",
     uploadedAt: "11 Sept 2026"
   }
 ];
-
-const MATERIALS_STORAGE_FILE = path.join(process.cwd(), "uploads", "study-materials.json");
-
-function loadPersistedMaterials(): void {
-  try {
-    if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
-      const data = fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8");
-      const list = JSON.parse(data);
-      if (Array.isArray(list) && list.length > 0) {
-        const existingIds = new Set(list.map((m: any) => m.id));
-        for (const item of studyMaterials) {
-          if (!existingIds.has(item.id)) {
-            list.push(item);
-          }
-        }
-        studyMaterials.length = 0;
-        studyMaterials.push(...list);
-        console.log(`Loaded ${studyMaterials.length} study materials from ${MATERIALS_STORAGE_FILE}`);
-      }
-    }
-  } catch (err) {
-    console.warn("Could not load persisted study materials:", err);
-  }
-}
-
-function savePersistedMaterials(): void {
-  try {
-    const dir = path.dirname(MATERIALS_STORAGE_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
-  } catch (err) {
-    console.warn("Could not save persisted study materials:", err);
-  }
-}
-
-loadPersistedMaterials();
 
 const assignments: DBAssignment[] = [
   {
@@ -1265,6 +1425,413 @@ function verifyPlaybackToken(token: string): { studentId: string; classId: strin
   }
 }
 
+// =========================================================================
+// PRODUCTION PERSISTENCE & DATA STORAGE
+// =========================================================================
+const DATA_STORAGE_DIR = path.join(process.cwd(), "uploads", "data");
+try {
+  if (!fs.existsSync(DATA_STORAGE_DIR)) {
+    fs.mkdirSync(DATA_STORAGE_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn("Could not create data storage directory:", e);
+}
+
+const REGISTRATIONS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "registrations.json");
+const USERS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "users.json");
+const BATCHES_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "batches.json");
+const PAYMENTS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "payments.json");
+const CMS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "cms-content.json");
+const ANNOUNCEMENTS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "announcements.json");
+const MATERIALS_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "materials.json");
+const GALLERY_STORAGE_FILE = path.join(DATA_STORAGE_DIR, "gallery.json");
+
+const payments: DBPayment[] = [];
+const galleryItems: DBGalleryItem[] = [
+  {
+    id: "gal-01",
+    title: "Interactive Live Spoken English Session",
+    caption: "Students engaging in real-time conversational speaking drills, overcoming hesitation with guided peer discussions.",
+    category: "Live Sessions",
+    imageUrl: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 1,
+    uploadedAt: "2026-09-15T10:00:00Z",
+    fileSize: "1.2 MB"
+  },
+  {
+    id: "gal-02",
+    title: "Confidence Building & Public Speaking Workshop",
+    caption: "Dedicated masterclass session on stage presence, body language articulation, and spontaneous speaking.",
+    category: "Events & Workshops",
+    imageUrl: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 2,
+    uploadedAt: "2026-09-18T14:30:00Z",
+    fileSize: "1.5 MB"
+  },
+  {
+    id: "gal-03",
+    title: "1-on-1 Mock Interview & Evaluation",
+    caption: "Personalized feedback and mock interview simulation preparing students for top corporate job placements.",
+    category: "Student Activities",
+    imageUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 3,
+    uploadedAt: "2026-09-20T11:15:00Z",
+    fileSize: "1.1 MB"
+  },
+  {
+    id: "gal-04",
+    title: "Collaborative Group Discussion & Debate",
+    caption: "Learners actively participating in structured debate rounds to hone persuasion, argumentation, and fluency.",
+    category: "Classrooms",
+    imageUrl: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 4,
+    uploadedAt: "2026-09-22T16:00:00Z",
+    fileSize: "1.8 MB"
+  },
+  {
+    id: "gal-05",
+    title: "WITS LINGO Student Community Meetup",
+    caption: "Connecting passionate English learners across India, celebrating milestones, and sharing inspiring transformation stories.",
+    category: "Community",
+    imageUrl: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 5,
+    uploadedAt: "2026-09-25T09:45:00Z",
+    fileSize: "1.4 MB"
+  },
+  {
+    id: "gal-06",
+    title: "Vocabulary & Pronunciation Mastery Drill",
+    caption: "In-depth breakdown of phonetics, eliminating Mother Tongue Influence (MTI) with practical articulation practice.",
+    category: "Classrooms",
+    imageUrl: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=1200&q=80",
+    isPublished: true,
+    displayOrder: 6,
+    uploadedAt: "2026-09-28T12:20:00Z",
+    fileSize: "1.3 MB"
+  }
+];
+
+function loadAllPersistedData(): void {
+  try {
+    // 1. Registrations
+    if (fs.existsSync(REGISTRATIONS_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(REGISTRATIONS_STORAGE_FILE, "utf-8"));
+      if (Array.isArray(data) && data.length > 0) {
+        const existingIds = new Set(data.map((r: any) => r.id || r.admissionId));
+        for (const r of registrations) {
+          if (!existingIds.has(r.id) && !existingIds.has(r.admissionId)) {
+            data.push(r);
+          }
+        }
+        registrations.length = 0;
+        registrations.push(...data);
+        console.log(`[Persistence] Loaded ${registrations.length} student registrations.`);
+      }
+    }
+
+    // 2. Users
+    if (fs.existsSync(USERS_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(USERS_STORAGE_FILE, "utf-8"));
+      if (Array.isArray(data) && data.length > 0) {
+        const existingEmails = new Set(data.map((u: any) => u.email?.toLowerCase()));
+        for (const u of users) {
+          if (!existingEmails.has(u.email.toLowerCase())) {
+            data.push(u);
+          }
+        }
+        users.length = 0;
+        users.push(...data);
+        console.log(`[Persistence] Loaded ${users.length} users.`);
+      }
+    }
+
+    // 3. Batches
+    if (fs.existsSync(BATCHES_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(BATCHES_STORAGE_FILE, "utf-8"));
+      if (Array.isArray(data) && data.length > 0) {
+        const existingIds = new Set(data.map((b: any) => b.id));
+        for (const b of batches) {
+          if (!existingIds.has(b.id)) {
+            data.push(b);
+          }
+        }
+        batches.length = 0;
+        batches.push(...data);
+        console.log(`[Persistence] Loaded ${batches.length} batches.`);
+      }
+    }
+
+    // 4. Payments
+    if (fs.existsSync(PAYMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(PAYMENTS_STORAGE_FILE, "utf-8"));
+      if (Array.isArray(data) && data.length > 0) {
+        payments.length = 0;
+        payments.push(...data);
+        console.log(`[Persistence] Loaded ${payments.length} verified payment transactions.`);
+      }
+    }
+
+    // 5. CMS Content
+    if (fs.existsSync(CMS_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CMS_STORAGE_FILE, "utf-8"));
+      if (data && typeof data === "object") {
+        cmsContent = {
+          ...cmsContent,
+          ...data,
+          settings: {
+            ...cmsContent.settings,
+            ...(data.settings || {})
+          }
+        };
+        console.log(`[Persistence] Loaded custom CMS content & settings.`);
+      }
+    }
+
+    // 6. Announcements
+    if (fs.existsSync(ANNOUNCEMENTS_STORAGE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(ANNOUNCEMENTS_STORAGE_FILE, "utf-8"));
+      if (Array.isArray(data) && data.length > 0) {
+        announcements.length = 0;
+        announcements.push(...data);
+        console.log(`[Persistence] Loaded ${announcements.length} announcements.`);
+      }
+    }
+
+    // 7. Study Materials
+    let materialsLoaded = false;
+    if (fs.existsSync(MATERIALS_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          for (const m of data) {
+            if (!m.downloadUrl || m.downloadUrl === "#") {
+              m.downloadUrl = `/api/files/download/${m.id}`;
+            }
+          }
+          studyMaterials.length = 0;
+          studyMaterials.push(...data);
+          materialsLoaded = true;
+          console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse materials.json:", e);
+      }
+    }
+    if (!materialsLoaded) {
+      const legacyPath = path.join(process.cwd(), "uploads", "study-materials.json");
+      if (fs.existsSync(legacyPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
+          if (Array.isArray(data) && data.length > 0) {
+            for (const m of data) {
+              if (!m.downloadUrl || m.downloadUrl === "#") {
+                m.downloadUrl = `/api/files/download/${m.id}`;
+              }
+            }
+            studyMaterials.length = 0;
+            studyMaterials.push(...data);
+            console.log(`[Persistence] Seeded ${studyMaterials.length} study materials from legacy storage.`);
+            savePersistedMaterials();
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 8. Gallery Items
+    let galleryLoaded = false;
+    if (fs.existsSync(GALLERY_STORAGE_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(GALLERY_STORAGE_FILE, "utf-8"));
+        if (Array.isArray(data) && data.length > 0) {
+          galleryItems.length = 0;
+          galleryItems.push(...data);
+          galleryLoaded = true;
+          console.log(`[Persistence] Loaded ${galleryItems.length} gallery items.`);
+        }
+      } catch (e) {
+        console.warn("[Persistence] Could not parse gallery.json:", e);
+      }
+    }
+    if (!galleryLoaded) {
+      const legacyPath = path.join(process.cwd(), "uploads", "gallery.json");
+      if (fs.existsSync(legacyPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
+          if (Array.isArray(data) && data.length > 0) {
+            galleryItems.length = 0;
+            galleryItems.push(...data);
+            console.log(`[Persistence] Seeded ${galleryItems.length} gallery items from legacy storage.`);
+            savePersistedGallery();
+          }
+        } catch (e) {}
+      } else {
+        savePersistedGallery();
+      }
+    }
+  } catch (err) {
+    console.warn("[Persistence] Error loading persisted data from disk:", err);
+  }
+}
+
+function savePersistedGallery(): void {
+  try {
+    fs.writeFileSync(GALLERY_STORAGE_FILE, JSON.stringify(galleryItems, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save gallery.json:", e);
+  }
+}
+
+function saveRegistrations(): void {
+  try {
+    fs.writeFileSync(REGISTRATIONS_STORAGE_FILE, JSON.stringify(registrations, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save registrations:", e);
+  }
+}
+
+function saveUsers(): void {
+  try {
+    fs.writeFileSync(USERS_STORAGE_FILE, JSON.stringify(users, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save users:", e);
+  }
+}
+
+function saveBatches(): void {
+  try {
+    fs.writeFileSync(BATCHES_STORAGE_FILE, JSON.stringify(batches, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save batches:", e);
+  }
+}
+
+function savePayments(): void {
+  try {
+    fs.writeFileSync(PAYMENTS_STORAGE_FILE, JSON.stringify(payments, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save payments:", e);
+  }
+}
+
+function saveCmsContent(): void {
+  try {
+    fs.writeFileSync(CMS_STORAGE_FILE, JSON.stringify(cmsContent, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save cmsContent:", e);
+  }
+}
+
+function saveAnnouncements(): void {
+  try {
+    fs.writeFileSync(ANNOUNCEMENTS_STORAGE_FILE, JSON.stringify(announcements, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save announcements:", e);
+  }
+}
+
+function savePersistedMaterials(): void {
+  try {
+    fs.writeFileSync(MATERIALS_STORAGE_FILE, JSON.stringify(studyMaterials, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("[Persistence] Could not save materials:", e);
+  }
+}
+
+// Initial boot load
+loadAllPersistedData();
+
+// =========================================================================
+// WHATSAPP CLOUD API AUTOMATION (Meta Graph API)
+// =========================================================================
+async function sendWhatsAppEnrollmentMessage(data: {
+  studentName: string;
+  courseName: string;
+  batchName: string;
+  startDate: string;
+  classTiming: string;
+  googleMeetLink?: string;
+  amount: number | string;
+  admissionId: string;
+  recipientPhone: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+  const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
+  const version = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
+  const templateName = process.env.WHATSAPP_ENROLLMENT_TEMPLATE_NAME?.trim() || "wits_lingo_enrollment_confirmation";
+  const templateLang = process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "en";
+
+  if (!phoneId || !token) {
+    console.log("[WhatsApp] Meta Cloud API credentials not configured in environment. Skipping automated API call.");
+    return { success: false, error: "WhatsApp credentials not configured" };
+  }
+
+  // Format recipient to E.164 without plus or non-digits (e.g. 919876543210)
+  let cleanRecipient = data.recipientPhone.replace(/\D/g, "");
+  if (cleanRecipient.length === 10) {
+    cleanRecipient = `91${cleanRecipient}`;
+  }
+
+  const meetLink = data.googleMeetLink && data.googleMeetLink.trim().length > 0 
+    ? data.googleMeetLink.trim() 
+    : "Google Meet link will be shared in your batch portal before class";
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: cleanRecipient,
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: templateLang },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: data.studentName || "Student" },
+            { type: "text", text: data.courseName || "English Course" },
+            { type: "text", text: data.batchName || "Active Batch" },
+            { type: "text", text: data.startDate || "Upcoming" },
+            { type: "text", text: data.classTiming || "Daily Live Session" },
+            { type: "text", text: meetLink },
+            { type: "text", text: `₹${data.amount}` },
+            { type: "text", text: data.admissionId }
+          ]
+        }
+      ]
+    }
+  };
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const resData = (await res.json()) as any;
+    if (!res.ok) {
+      const errDetail = resData?.error?.message || "WhatsApp dispatch rejected by Meta";
+      console.warn(`[WhatsApp] Delivery failure: ${errDetail}`);
+      return { success: false, error: errDetail };
+    }
+
+    const msgId = resData?.messages?.[0]?.id;
+    console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
+    return { success: true, messageId: msgId };
+  } catch (err: any) {
+    console.warn(`[WhatsApp] Network exception during dispatch: ${err?.message || err}`);
+    return { success: false, error: err?.message || "Network exception" };
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -1287,6 +1854,7 @@ async function startServer() {
     dataBase64: string;
     uploadedAt: string;
     b2FileId?: string;
+    b2FileName?: string;
     b2Url?: string;
   }>();
 
@@ -1699,7 +2267,12 @@ async function startServer() {
       return res.status(403).json({ error: "Access Denied: You are not authorized to access study materials for this batch." });
     }
 
-    const materials = studyMaterials.filter(m => m.batchId === batchId);
+    const materials = studyMaterials
+      .filter(m => m.batchId === batchId || m.batchId === 'all')
+      .map(m => ({
+        ...m,
+        downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
+      }));
     res.json({ materials });
   });
 
@@ -1769,10 +2342,904 @@ async function startServer() {
     res.json({ announcements: batchAnnouncements });
   });
 
-  // 14. ADMISSION & REGISTRATION WITH PAYMENT CONFIRMATION
-  // Requirement: "Course fee payment with Registration. No registration confirmed unless the fee is successfully paid. I'll use my razor pay link for it. (also PayPal option)"
-  // "All batchwise students data, e.g. Batch, October, 2026, batch November, 2026 etc. And all registered students with their important details, like, Name, father name, date of birth, district and state, and contacts etc."
+  // =========================================================================
+  // RAZORPAY PAYMENT GATEWAY & VERIFICATION ENGINE
+  // =========================================================================
+
+  // Check Razorpay Configuration Status
+  app.get("/api/payments/razorpay/config", (req, res) => {
+    const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+    res.json({
+      configured: Boolean(keyId),
+      keyId: keyId || null
+    });
+  });
+
+  // 1. Create Official Razorpay Payment Order (Server-Side Price Calculation)
+  app.post("/api/payments/razorpay/order", async (req, res) => {
+    try {
+      const { courseId, batchId, studentName, studentEmail, studentPhone } = req.body;
+      if (!courseId) {
+        return res.status(400).json({ error: "courseId is required to generate an order." });
+      }
+
+      const course = cmsContent.courses.find((c: any) => c.id === courseId);
+      if (!course) {
+        return res.status(404).json({ error: "Course not found." });
+      }
+
+      const batch = batchId ? batches.find(b => b.id === batchId) : null;
+      const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+      if (!keyId || !keySecret) {
+        return res.status(503).json({
+          success: false,
+          requiresConfig: true,
+          error: "Razorpay payment gateway is not yet configured in server environment. Please configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env."
+        });
+      }
+
+      const amountInPaise = Math.round(Number(course.fee) * 100);
+      const receiptId = `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          amount: amountInPaise,
+          currency: "INR",
+          receipt: receiptId,
+          notes: {
+            courseId: course.id,
+            courseName: course.name,
+            batchId: batch?.id || "",
+            batchName: batch?.name || "",
+            studentName: studentName || "",
+            studentEmail: studentEmail || "",
+            studentPhone: studentPhone || ""
+          }
+        })
+      });
+
+      const orderData = (await rzpResponse.json()) as any;
+      if (!rzpResponse.ok) {
+        console.warn("[Razorpay] Order creation failed:", orderData?.error?.description || orderData);
+        return res.status(rzpResponse.status).json({
+          success: false,
+          error: orderData?.error?.description || "Failed to create Razorpay payment order."
+        });
+      }
+
+      res.json({
+        success: true,
+        orderId: orderData.id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        keyId,
+        courseName: course.name,
+        batchName: batch?.name || "Assigned Batch"
+      });
+    } catch (err: any) {
+      console.error("[Razorpay] Error creating order:", err);
+      res.status(500).json({ success: false, error: "Internal server error creating payment order." });
+    }
+  });
+
+  // 2. Verify Razorpay Payment Signature & Confirm Student Enrollment
+  app.post("/api/payments/razorpay/verify", async (req, res) => {
+    try {
+      const {
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        name,
+        fatherName,
+        dob,
+        gender,
+        country,
+        district,
+        state,
+        pincode,
+        phone,
+        phoneCountryCode,
+        whatsapp,
+        whatsappCountryCode,
+        email,
+        address,
+        qualification,
+        currentEnglishLevel,
+        courseId,
+        batchId,
+        studentPassword
+      } = req.body;
+
+      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        return res.status(400).json({ error: "Missing required Razorpay payment verification parameters." });
+      }
+
+      if (!name || !fatherName || !dob || !district || !state || !phone || !whatsapp || !email || !courseId || !batchId) {
+        return res.status(400).json({ error: "Please fill all required student and parent fields." });
+      }
+
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+      if (!keySecret) {
+        return res.status(503).json({ error: "Razorpay secret key not configured on server." });
+      }
+
+      // Cryptographic signature check
+      const generatedSignature = crypto
+        .createHmac("sha256", keySecret)
+        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+        .digest("hex");
+
+      if (generatedSignature !== razorpaySignature) {
+        console.warn(`[Razorpay] Invalid signature attempt. Provided: ${razorpaySignature}, Generated: ${generatedSignature}`);
+        return res.status(400).json({
+          success: false,
+          error: "Cryptographic payment verification failed. Invalid signature."
+        });
+      }
+
+      const batch = batches.find(b => b.id === batchId);
+      if (!batch) {
+        return res.status(404).json({ error: "Selected batch not found." });
+      }
+
+      const course = cmsContent.courses.find((c: any) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+
+      // Format phones
+      const pCode = phoneCountryCode || '+91';
+      const cleanPhone = (phone || "").toString().replace(/\D/g, "").slice(-10);
+      const fullPhoneFormatted = `${pCode} ${cleanPhone}`;
+
+      const wCode = whatsappCountryCode || pCode;
+      const cleanWhatsapp = (whatsapp || "").toString().replace(/\D/g, "").slice(-10);
+      const fullWhatsappFormatted = `${wCode} ${cleanWhatsapp}`;
+      const fullCountryDigits = (wCode.replace(/\D/g, "") || "91");
+      const whatsappCleanRecipient = `${fullCountryDigits}${cleanWhatsapp}`;
+
+      // Unique Admission ID
+      const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, '');
+      const randomSeq = Math.floor(1000 + Math.random() * 9000);
+      const admissionId = `WL-${batchYearMonth}-${randomSeq}`;
+
+      const studentReg: DBStudentRegistration = {
+        id: `reg-${Date.now()}`,
+        admissionId,
+        name: name.trim(),
+        fatherName: fatherName.trim(),
+        dob,
+        gender: gender || "Not Specified",
+        country: country?.trim() || "India",
+        district: district.trim(),
+        state: state.trim(),
+        pincode: pincode?.trim() || "",
+        phone: fullPhoneFormatted,
+        whatsapp: fullWhatsappFormatted,
+        email: email.trim().toLowerCase(),
+        address: address?.trim() || `${district}, ${state}, ${country || 'India'}${pincode ? ' - ' + pincode : ''}`,
+        qualification: qualification || "Undergraduate",
+        currentEnglishLevel: currentEnglishLevel || "Beginner",
+        courseId,
+        courseName: course.name,
+        batchId: batch.id,
+        batchName: batch.name,
+        feeAmount: course.fee,
+        paymentStatus: "Paid",
+        paymentMethod: "Razorpay",
+        paymentCurrency: "INR",
+        paymentAmountFormatted: `₹${course.fee.toLocaleString()}`,
+        paymentTxnId: razorpayPaymentId,
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        googleMeetLink: batch.googleMeetLink || "",
+        whatsappDeliveryStatus: "pending",
+        registeredAt: new Date().toISOString()
+      };
+
+      registrations.unshift(studentReg);
+      batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
+
+      // Record Payment
+      const paymentRecord: DBPayment = {
+        id: `pay-${Date.now()}`,
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+        amount: course.fee,
+        currency: "INR",
+        status: "Paid",
+        studentName: studentReg.name,
+        studentEmail: studentReg.email,
+        studentPhone: studentReg.phone,
+        courseId: studentReg.courseId,
+        courseName: studentReg.courseName,
+        batchId: studentReg.batchId,
+        batchName: studentReg.batchName,
+        admissionId: studentReg.admissionId,
+        method: "Razorpay",
+        createdAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+        source: "razorpay_verify"
+      };
+      payments.unshift(paymentRecord);
+
+      // User Account
+      const assignedPassword = (studentPassword || "WitsLingo@2026").trim();
+      let user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      if (user) {
+        if (!user.batchIds.includes(batch.id)) {
+          user.batchIds.push(batch.id);
+        }
+        if (assignedPassword && assignedPassword !== "student123") {
+          user.passwordHash = assignedPassword;
+        }
+        if (!user.admissionId) {
+          user.admissionId = admissionId;
+        }
+      } else {
+        user = {
+          id: `usr-${Date.now()}`,
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          passwordHash: assignedPassword,
+          role: "student",
+          phone: fullPhoneFormatted,
+          batchIds: [batch.id],
+          admissionId,
+          registrationDate: new Date().toISOString().split("T")[0]
+        };
+        users.push(user);
+      }
+
+      const token = generateAuthToken(user);
+
+      // Save persisted changes to disk
+      saveRegistrations();
+      saveUsers();
+      saveBatches();
+      savePayments();
+
+      // Async Non-blocking WhatsApp Confirmation
+      sendWhatsAppEnrollmentMessage({
+        studentName: studentReg.name,
+        courseName: studentReg.courseName,
+        batchName: studentReg.batchName,
+        startDate: batch.startDate || "Upcoming",
+        classTiming: batch.scheduleTime || "Daily Live Class",
+        googleMeetLink: batch.googleMeetLink,
+        amount: studentReg.feeAmount,
+        admissionId: studentReg.admissionId,
+        recipientPhone: studentReg.whatsapp || studentReg.phone
+      }).then(waRes => {
+        studentReg.whatsappDeliveryStatus = waRes.success ? "sent" : "failed";
+        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        saveRegistrations();
+      }).catch(err => {
+        console.warn("[WhatsApp] Async dispatch error:", err);
+        studentReg.whatsappDeliveryStatus = "failed";
+        saveRegistrations();
+      });
+
+      const confirmationText = 
+`🎓 *WITS LINGO — OFFICIAL ADMISSION CONFIRMATION*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${name.trim()}*,
+Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A Global Language Platform*.
+
+📋 *ADMISSION SUMMARY*
+• *Admission ID / Roll No:* ${admissionId}
+• *Student Name:* ${name.trim()}
+• *Father's Name:* ${fatherName.trim()}
+• *Enrolled Course:* ${course.name}
+• *Assigned Batch:* ${batch.name} (${batch.batchCode})
+• *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
+• *Batch Start Date:* ${batch.startDate || '1st of the month'}
+• *Google Meet Link:* ${batch.googleMeetLink || 'Will be shared in student portal'}
+• *Fee Paid:* ₹${course.fee} (Verified via Razorpay)
+• *Payment Ref:* ${razorpayPaymentId}
+
+🔐 *STUDENT PORTAL LOGIN*
+• *Portal URL:* https://witslingo.com/login
+• *Username:* ${user.email} (or ${admissionId})
+• *Password:* ${user.passwordHash}
+
+📱 *BATCH WHATSAPP GROUP & SUPPORT*
+📞 *+91 8791287575* / *+91 7310952271*
+
+Welcome to WITS LINGO!
+www.witslingo.com`;
+
+      const encodedMsg = encodeURIComponent(confirmationText);
+      const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
+      const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=918791287575&text=${encodedMsg}`;
+
+      studentReg.whatsappConfirmationMessage = confirmationText;
+      studentReg.whatsappStudentUrl = whatsappStudentUrl;
+      studentReg.whatsappAdminUrl = whatsappAdminUrl;
+
+      res.json({
+        success: true,
+        message: "Payment verified and enrollment confirmed! Welcome to WITS LINGO.",
+        admissionId,
+        registration: studentReg,
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          batchIds: user.batchIds,
+          admissionId
+        },
+        credentials: {
+          username: user.email,
+          alternativeUsername: admissionId,
+          password: user.passwordHash
+        },
+        whatsapp: {
+          recipientNumber: fullWhatsappFormatted,
+          cleanRecipient: whatsappCleanRecipient,
+          confirmationMessage: confirmationText,
+          studentUrl: whatsappStudentUrl,
+          adminUrl: whatsappAdminUrl
+        }
+      });
+    } catch (err: any) {
+      console.error("[Razorpay] Verification endpoint exception:", err);
+      res.status(500).json({ success: false, error: "Internal server error verifying payment." });
+    }
+  });
+
+  // 3. Webhook Listener for Asynchronous Payment Confirmations
+  app.post("/api/webhooks/razorpay", (req, res) => {
+    try {
+      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+      const signature = req.headers["x-razorpay-signature"] as string;
+
+      if (webhookSecret && signature) {
+        const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+        const expectedSignature = crypto
+          .createHmac("sha256", webhookSecret)
+          .update(rawBody)
+          .digest("hex");
+
+        if (expectedSignature !== signature) {
+          console.warn("[Razorpay Webhook] Invalid signature rejected.");
+          return res.status(400).json({ error: "Invalid webhook signature." });
+        }
+      }
+
+      const payload = req.body;
+      const event = payload?.event;
+      console.log(`[Razorpay Webhook] Event received: ${event}`);
+
+      if (event === "payment.captured" || event === "order.paid") {
+        const paymentEntity = payload?.payload?.payment?.entity;
+        if (paymentEntity) {
+          const orderId = paymentEntity.order_id;
+          const paymentId = paymentEntity.id;
+          const amount = paymentEntity.amount ? paymentEntity.amount / 100 : 0;
+
+          const reg = registrations.find(r => r.razorpayOrderId === orderId);
+          if (reg) {
+            reg.paymentStatus = "Paid";
+            reg.razorpayPaymentId = paymentId;
+            saveRegistrations();
+          }
+
+          const existingPayment = payments.find(p => p.paymentId === paymentId);
+          if (!existingPayment) {
+            payments.unshift({
+              id: `pay-${Date.now()}`,
+              orderId: orderId || "",
+              paymentId: paymentId || "",
+              amount,
+              currency: paymentEntity.currency || "INR",
+              status: "Paid",
+              studentName: reg?.name || paymentEntity.notes?.studentName || "Student",
+              studentEmail: reg?.email || paymentEntity.email || "",
+              studentPhone: reg?.phone || paymentEntity.contact || "",
+              courseId: reg?.courseId || paymentEntity.notes?.courseId || "",
+              courseName: reg?.courseName || paymentEntity.notes?.courseName || "",
+              batchId: reg?.batchId || paymentEntity.notes?.batchId || "",
+              batchName: reg?.batchName || paymentEntity.notes?.batchName || "",
+              admissionId: reg?.admissionId || "",
+              method: paymentEntity.method || "Razorpay",
+              createdAt: new Date().toISOString(),
+              source: "razorpay_webhook"
+            });
+            savePayments();
+          }
+        }
+      }
+
+      res.json({ status: "ok" });
+    } catch (err: any) {
+      console.error("[Razorpay Webhook] Error processing webhook:", err);
+      res.status(500).json({ error: "Webhook processing error." });
+    }
+  });
+
+  // =========================================================================
+  // HERO VIDEO BACKBLAZE B2 MANAGEMENT & STREAMING
+  // =========================================================================
+
+  app.post("/api/admin/hero-video/upload", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    const { dataBase64, filename, mimeType } = req.body;
+    if (!dataBase64) {
+      return res.status(400).json({ error: "Video dataBase64 is required." });
+    }
+
+    const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
+    const buffer = Buffer.from(rawBase64, "base64");
+    const safeFilename = (filename || "hero-video.mp4").replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    // Save to disk for durability & smooth local range streaming
+    const diskPath = path.join(uploadsDir, "hero-video.mp4");
+    try {
+      fs.writeFileSync(diskPath, buffer);
+    } catch (diskErr) {
+      console.warn("Could not save hero video to disk:", diskErr);
+    }
+
+    let finalVideoUrl = `/api/files/hero-video/${encodeURIComponent(safeFilename)}`;
+    let uploadedToB2 = false;
+
+    // Upload to Backblaze B2 if configured
+    try {
+      const objectKey = `site/hero-video-${Date.now()}-${safeFilename}`;
+      const b2Res = await uploadBufferToB2(objectKey, buffer, mimeType || "video/mp4");
+      if (b2Res.success && b2Res.url) {
+        finalVideoUrl = b2Res.url;
+        uploadedToB2 = true;
+      }
+    } catch (b2Err: any) {
+      console.warn("Could not upload hero video to Backblaze B2, fallback to local stream:", b2Err?.message);
+    }
+
+    if (!cmsContent.settings) cmsContent.settings = {};
+    cmsContent.settings.heroVideoUrl = finalVideoUrl;
+    saveCmsContent();
+
+    res.json({
+      success: true,
+      heroVideoUrl: finalVideoUrl,
+      uploadedToB2,
+      message: "Hero video uploaded and updated successfully."
+    });
+  });
+
+  app.post("/api/admin/hero-video/reset", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    if (!cmsContent.settings) cmsContent.settings = {};
+    cmsContent.settings.heroVideoUrl = "/video/wits-lingo-intro.mp4";
+    saveCmsContent();
+
+    res.json({
+      success: true,
+      heroVideoUrl: "/video/wits-lingo-intro.mp4",
+      message: "Hero video reset to default intro video."
+    });
+  });
+
+  app.get("/api/files/hero-video/:filename?", (req, res) => {
+    const diskPath = path.join(uploadsDir, "hero-video.mp4");
+    if (!fs.existsSync(diskPath)) {
+      return res.redirect("/video/wits-lingo-intro.mp4");
+    }
+
+    const stat = fs.statSync(diskPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+      const file = fs.createReadStream(diskPath, { start, end });
+      const head = {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunksize,
+        "Content-Type": "video/mp4",
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        "Content-Length": fileSize,
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes"
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(diskPath).pipe(res);
+    }
+  });
+
+  // =========================================================================
+  // GALLERY MANAGEMENT & BACKBLAZE B2 PHOTO STORAGE
+  // =========================================================================
+
+  // 1. Public Gallery Items
+  app.get("/api/gallery", (req, res) => {
+    try {
+      const categoryFilter = typeof req.query.category === "string" ? req.query.category.trim() : "";
+      
+      let items = galleryItems.filter(item => item.isPublished === true);
+      
+      if (categoryFilter && categoryFilter.toLowerCase() !== "all" && categoryFilter.toLowerCase() !== "all moments") {
+        items = items.filter(item => (item.category || "").toLowerCase() === categoryFilter.toLowerCase());
+      }
+      
+      // Sort by displayOrder ascending, then uploadedAt descending
+      items.sort((a, b) => {
+        const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+      });
+
+      // Collect all unique categories from published items
+      const allCategoriesSet = new Set<string>();
+      for (const item of galleryItems.filter(i => i.isPublished === true)) {
+        if (item.category && item.category.trim()) {
+          allCategoriesSet.add(item.category.trim());
+        }
+      }
+
+      const defaultCategories = ["Classrooms", "Live Sessions", "Events & Workshops", "Student Activities", "Community"];
+      for (const c of defaultCategories) {
+        allCategoriesSet.add(c);
+      }
+
+      res.json({
+        success: true,
+        items,
+        categories: ["All Moments", ...Array.from(allCategoriesSet)],
+        totalCount: items.length
+      });
+    } catch (err: any) {
+      console.error("[Gallery] Public fetch error:", err);
+      res.status(500).json({ error: "Failed to load gallery." });
+    }
+  });
+
+  // 2. Admin Gallery Items (Includes Drafts & Reorder controls)
+  app.get("/api/admin/gallery", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    try {
+      const sorted = [...galleryItems].sort((a, b) => {
+        const orderDiff = (a.displayOrder || 999) - (b.displayOrder || 999);
+        if (orderDiff !== 0) return orderDiff;
+        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+      });
+
+      res.json({
+        success: true,
+        items: sorted,
+        totalCount: sorted.length
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to load admin gallery." });
+    }
+  });
+
+  // 3. Admin Gallery Upload (Single or Multi-file directly to Backblaze B2)
+  app.post("/api/admin/gallery/upload", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    try {
+      const { images, dataBase64, filename, mimeType, title, caption, category, isPublished, displayOrder } = req.body;
+      
+      const uploadList: Array<{
+        dataBase64: string;
+        filename?: string;
+        mimeType?: string;
+        title?: string;
+        caption?: string;
+        category?: string;
+        isPublished?: boolean;
+        displayOrder?: number;
+      }> = [];
+
+      if (Array.isArray(images) && images.length > 0) {
+        uploadList.push(...images);
+      } else if (dataBase64) {
+        uploadList.push({
+          dataBase64,
+          filename,
+          mimeType,
+          title,
+          caption,
+          category,
+          isPublished,
+          displayOrder
+        });
+      } else {
+        return res.status(400).json({ error: "No image payload provided." });
+      }
+
+      const validMimeTypes = [
+        "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif", "image/svg+xml"
+      ];
+
+      const createdItems: DBGalleryItem[] = [];
+
+      for (const item of uploadList) {
+        if (!item.dataBase64) continue;
+        const mime = (item.mimeType || "image/jpeg").toLowerCase();
+        if (!validMimeTypes.includes(mime) && !mime.startsWith("image/")) {
+          continue; // Skip invalid format
+        }
+
+        const rawBase64 = item.dataBase64.includes(",") ? item.dataBase64.split(",")[1] : item.dataBase64;
+        const buffer = Buffer.from(rawBase64, "base64");
+        if (buffer.length === 0 || buffer.length > 25 * 1024 * 1024) {
+          continue; // Skip empty or overly large files (>25MB)
+        }
+
+        const id = `gal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const safeOriginalName = (item.filename || `photo-${Date.now()}.jpg`).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const diskFilename = `${id}-${safeOriginalName}`;
+        const diskPath = path.join(uploadsDir, diskFilename);
+
+        try {
+          fs.writeFileSync(diskPath, buffer);
+        } catch (diskErr) {
+          console.warn("[Gallery] Could not cache image on disk:", diskErr);
+        }
+
+        let imageUrl = `/api/files/gallery/${id}/${encodeURIComponent(safeOriginalName)}`;
+        let b2FileId: string | undefined;
+        let b2FileName: string | undefined;
+
+        try {
+          const b2Key = `gallery/${id}-${safeOriginalName}`;
+          const b2Res = await uploadBufferToB2(b2Key, buffer, mime);
+          if (b2Res.success && b2Res.url) {
+            imageUrl = b2Res.url;
+            b2FileId = b2Res.fileId;
+            b2FileName = b2Res.fileName || b2Key;
+          }
+        } catch (b2Err: any) {
+          console.warn("[Gallery] Backblaze B2 upload error, falling back to local stream:", b2Err?.message);
+        }
+
+        const sizeMB = buffer.length / (1024 * 1024);
+        const fileSize = sizeMB >= 1 ? `${sizeMB.toFixed(1)} MB` : `${Math.round(buffer.length / 1024)} KB`;
+
+        const autoTitle = (item.title || "").trim() || safeOriginalName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
+        const newGalleryItem: DBGalleryItem = {
+          id,
+          title: autoTitle,
+          caption: (item.caption || "").trim(),
+          category: (item.category || "Classrooms").trim(),
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          b2FileId,
+          b2FileName,
+          isPublished: item.isPublished !== false,
+          displayOrder: typeof item.displayOrder === "number" ? item.displayOrder : (galleryItems.length + 1),
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: auth.userId || "admin",
+          fileSize
+        };
+
+        galleryItems.unshift(newGalleryItem);
+        createdItems.push(newGalleryItem);
+      }
+
+      if (createdItems.length === 0) {
+        return res.status(400).json({ error: "Failed to process any valid images." });
+      }
+
+      savePersistedGallery();
+
+      res.json({
+        success: true,
+        items: createdItems,
+        totalCount: galleryItems.length,
+        message: `Successfully uploaded ${createdItems.length} image(s) to Gallery.`
+      });
+    } catch (err: any) {
+      console.error("[Gallery] Upload failed:", err);
+      res.status(500).json({ error: "Server error during gallery upload." });
+    }
+  });
+
+  // 4. Admin Update Gallery Item
+  app.put("/api/admin/gallery/:id", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    const { id } = req.params;
+    const item = galleryItems.find(g => g.id === id);
+    if (!item) {
+      return res.status(404).json({ error: "Gallery item not found." });
+    }
+
+    const { title, caption, category, isPublished, displayOrder } = req.body;
+    if (typeof title === "string") item.title = title.trim();
+    if (typeof caption === "string") item.caption = caption.trim();
+    if (typeof category === "string") item.category = category.trim();
+    if (typeof isPublished === "boolean") item.isPublished = isPublished;
+    if (typeof displayOrder === "number") item.displayOrder = displayOrder;
+
+    savePersistedGallery();
+
+    res.json({
+      success: true,
+      item,
+      message: "Gallery item updated successfully."
+    });
+  });
+
+  // 5. Admin Batch Reorder Gallery Items
+  app.put("/api/admin/gallery/reorder", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: "orderedIds array required." });
+    }
+
+    orderedIds.forEach((id: string, index: number) => {
+      const item = galleryItems.find(g => g.id === id);
+      if (item) {
+        item.displayOrder = index + 1;
+      }
+    });
+
+    savePersistedGallery();
+
+    res.json({
+      success: true,
+      items: galleryItems,
+      message: "Gallery order updated successfully."
+    });
+  });
+
+  // 6. Admin Delete Gallery Item (Safe Persistence First, then B2 cleanup)
+  app.delete("/api/admin/gallery/:id", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    const { id } = req.params;
+    const idx = galleryItems.findIndex(g => g.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "Gallery item not found." });
+    }
+
+    const targetItem = galleryItems[idx];
+    
+    // 1. Remove from array and save metadata first for safety
+    galleryItems.splice(idx, 1);
+    savePersistedGallery();
+
+    // 2. Safely clean up local disk files
+    try {
+      if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        for (const file of files) {
+          if (file.startsWith(id) || file.startsWith(`gal-${id}`)) {
+            try {
+              fs.unlinkSync(path.join(uploadsDir, file));
+            } catch (unlinkErr) {}
+          }
+        }
+      }
+    } catch (cleanErr) {
+      console.warn("[Gallery] Local file cleanup error:", cleanErr);
+    }
+
+    // 3. Clean up B2 storage object safely in background
+    if (targetItem.b2FileId || targetItem.b2FileName) {
+      deleteFileFromB2(targetItem.b2FileId, targetItem.b2FileName).catch(b2Err => {
+        console.warn("[Gallery] B2 file delete error:", b2Err);
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Gallery image deleted successfully."
+    });
+  });
+
+  // 7. Stream Gallery Image (Local disk cache or fallback)
+  app.get("/api/files/gallery/:id/:filename?", async (req, res) => {
+    const { id, filename } = req.params;
+    
+    // Check local disk cache
+    let foundPath: string | null = null;
+    try {
+      if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        for (const f of files) {
+          if (f.startsWith(id)) {
+            foundPath = path.join(uploadsDir, f);
+            break;
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (foundPath && fs.existsSync(foundPath)) {
+      const ext = path.extname(foundPath).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".avif": "image/avif"
+      };
+      res.setHeader("Content-Type", mimeTypes[ext] || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return fs.createReadStream(foundPath).pipe(res);
+    }
+
+    // If not on disk, check if item has B2 record and stream from B2
+    const item = galleryItems.find(g => g.id === id);
+    if (item && (item.b2FileId || item.b2FileName)) {
+      try {
+        const b2Res = await downloadBufferFromB2(item.b2FileId, item.b2FileName);
+        if (b2Res.success && b2Res.buffer) {
+          try {
+            const diskSave = path.join(uploadsDir, `${id}-${filename || "image.jpg"}`);
+            fs.writeFileSync(diskSave, b2Res.buffer);
+          } catch (e) {}
+          res.setHeader("Content-Type", b2Res.contentType || "image/jpeg");
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          return res.send(b2Res.buffer);
+        }
+      } catch (b2Err) {
+        console.warn("[Gallery] B2 download stream error:", b2Err);
+      }
+    }
+
+    if (item && item.imageUrl && item.imageUrl.startsWith("http")) {
+      return res.redirect(item.imageUrl);
+    }
+
+    res.status(404).send("Gallery image not found.");
+  });
+
+  // 14. ADMISSION & REGISTRATION (Direct Admin Registration or Standard Entry)
   app.post("/api/admissions/register", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    const isAdmin = auth && auth.role === "admin";
+
     const {
       name,
       fatherName,
@@ -1832,19 +3299,15 @@ async function startServer() {
     const fullPhoneFormatted = `${pCode} ${cleanPhone}`;
     const fullWhatsappFormatted = `${wCode} ${cleanWhatsapp}`;
 
-    if (!isFeePaid) {
-      return res.status(400).json({
-        error: "Course fee payment is required to confirm admission. No registration is confirmed unless the fee is successfully paid.",
-        paymentRequired: true
-      });
-    }
-
     const batch = batches.find(b => b.id === batchId);
     if (!batch) {
       return res.status(404).json({ error: "Selected batch not found." });
     }
 
     const course = cmsContent.courses.find((c: any) => c.id === courseId) || { name: "Spoken English", fee: 1499 };
+
+    // Fee payment validation
+    const paymentStatus: "Paid" | "Pending" = (isFeePaid && isAdmin) || isFeePaid ? "Paid" : "Pending";
 
     // Generate unique Admission ID
     const batchYearMonth = batch.batchCode.replace(/[^A-Za-z0-9]/g, '');
@@ -1873,18 +3336,21 @@ async function startServer() {
       batchId: batch.id,
       batchName: batch.name,
       feeAmount: course.fee,
-      paymentStatus: "Paid",
-      paymentMethod: paymentMethod || "UPI / Google Pay",
+      paymentStatus,
+      paymentMethod: paymentMethod || "UPI / Direct",
       paymentCurrency: req.body.paymentCurrency || "INR",
       paymentAmountFormatted: req.body.paymentAmountFormatted || `₹${course.fee.toLocaleString()}`,
-      paymentTxnId: paymentTxnId || `txn_${Date.now()}`,
+      paymentTxnId: paymentTxnId || `adm_${Date.now()}`,
+      googleMeetLink: batch.googleMeetLink || "",
       registeredAt: new Date().toISOString()
     };
 
     registrations.unshift(studentReg);
 
     // Update batch student count
-    batch.currentStudentsCount += 1;
+    if (paymentStatus === "Paid") {
+      batch.currentStudentsCount = (batch.currentStudentsCount || 0) + 1;
+    }
 
     // Check if user account already exists or create new student account
     const assignedPassword = (req.body.password || req.body.studentPassword || "WitsLingo@2026").trim();
@@ -1934,7 +3400,8 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 • *Assigned Batch:* ${batch.name} (${batch.batchCode})
 • *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
 • *Batch Start Date:* ${batch.startDate || '1st of the month'}
-• *Fee Paid:* ${studentReg.paymentAmountFormatted || '₹' + course.fee} (Verified)
+• *Google Meet Link:* ${batch.googleMeetLink || 'Will be shared in student portal'}
+• *Fee Status:* ${paymentStatus} (${studentReg.paymentAmountFormatted || '₹' + course.fee})
 • *Payment Ref:* ${studentReg.paymentTxnId}
 
 🔐 *PURCHASED BATCH PORTAL LOGIN*
@@ -1962,9 +3429,35 @@ www.witslingo.com`;
     studentReg.whatsappStudentUrl = whatsappStudentUrl;
     studentReg.whatsappAdminUrl = whatsappAdminUrl;
 
+    // Save persisted state to disk
+    saveRegistrations();
+    saveUsers();
+    saveBatches();
+
+    // Async WhatsApp dispatch
+    if (paymentStatus === "Paid") {
+      sendWhatsAppEnrollmentMessage({
+        studentName: studentReg.name,
+        courseName: studentReg.courseName,
+        batchName: studentReg.batchName,
+        startDate: batch.startDate || "Upcoming",
+        classTiming: batch.scheduleTime || "Daily Live Session",
+        googleMeetLink: batch.googleMeetLink,
+        amount: studentReg.feeAmount,
+        admissionId: studentReg.admissionId,
+        recipientPhone: studentReg.whatsapp || studentReg.phone
+      }).then(waRes => {
+        studentReg.whatsappDeliveryStatus = waRes.success ? "sent" : "failed";
+        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        saveRegistrations();
+      }).catch(err => {
+        console.warn("[WhatsApp] Async dispatch exception:", err);
+      });
+    }
+
     res.json({
       success: true,
-      message: "Admission registered and course fee verified successfully! Welcome to WITS LINGO.",
+      message: "Admission registered successfully! Welcome to WITS LINGO.",
       admissionId,
       registration: studentReg,
       token,
@@ -2093,7 +3586,7 @@ www.witslingo.com`
       return res.status(403).json({ error: "Access Denied: Admin authorization required." });
     }
 
-    const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status } = req.body;
+    const { name, courseId, courseName, batchCode, startDate, endDate, teacherName, scheduleTime, maxStudents, status, googleMeetLink } = req.body;
     if (!name || !batchCode) {
       return res.status(400).json({ error: "Batch name and code are required." });
     }
@@ -2111,10 +3604,12 @@ www.witslingo.com`
       maxStudents: Number(maxStudents) || 35,
       currentStudentsCount: 0,
       status: status || "Upcoming",
-      isVisibleOnWebsite: req.body.isVisibleOnWebsite !== false
+      isVisibleOnWebsite: req.body.isVisibleOnWebsite !== false,
+      googleMeetLink: googleMeetLink ? googleMeetLink.trim() : ""
     };
 
     batches.unshift(newBatch);
+    saveBatches();
     res.json({ success: true, batch: newBatch });
   });
 
@@ -2256,7 +3751,11 @@ www.witslingo.com`
 
   // 20a. PUBLIC: Get All Live Website Study Materials & PDF Resources
   app.get("/api/materials", (req, res) => {
-    res.json({ materials: studyMaterials });
+    const publicMaterials = studyMaterials.map(m => ({
+      ...m,
+      downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
+    }));
+    res.json({ materials: publicMaterials });
   });
 
   // 20b. ADMIN: Get All Study Materials
@@ -2265,7 +3764,11 @@ www.witslingo.com`
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
-    res.json({ materials: studyMaterials });
+    const allMaterials = studyMaterials.map(m => ({
+      ...m,
+      downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
+    }));
+    res.json({ materials: allMaterials });
   });
 
   // 20c. ADMIN: Upload Study Material (PDF with View-Only support)
@@ -2275,23 +3778,38 @@ www.witslingo.com`
       return res.status(403).json({ error: "Admin authorization required." });
     }
 
-    const { batchId, classId, title, description, fileType, fileSize, pdfUrl, isViewOnly, allowDownload, isVisibleOnWebsite, category, level } = req.body;
+    const { 
+      batchId, classId, title, description, fileType, fileSize, 
+      pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
+      isViewOnly, allowDownload, isVisibleOnWebsite, category, level 
+    } = req.body;
+
+    const newId = `mat-${Date.now()}`;
+    const safeTitle = (title || "Study Material.pdf").trim();
+    const finalFileType = fileType || (safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc");
+    const finalDownloadUrl = (downloadUrl && downloadUrl !== "#") ? downloadUrl : `/api/files/download/${newId}`;
+    const finalPdfUrl = pdfUrl || `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}`;
+
     const newMat: DBStudyMaterial = {
-      id: `mat-${Date.now()}`,
+      id: newId,
       batchId: batchId || "batch-spoken-oct-2026",
       classId,
-      title: title || "Lecture Notes & Practice Sheet.pdf",
-      description: description || "Study materials uploaded by instructor.",
-      fileType: fileType || "pdf",
-      fileSize: fileSize || "2.1 MB",
-      downloadUrl: "#",
-      pdfUrl: pdfUrl || "",
+      title: safeTitle,
+      description: description || "Study materials uploaded by academy instructor.",
+      fileType: finalFileType,
+      fileSize: fileSize || "1.5 MB",
+      downloadUrl: finalDownloadUrl,
+      pdfUrl: finalPdfUrl,
+      b2FileId,
+      b2FileName,
+      mimeType: mimeType || getSafeFileMimeType(safeTitle),
       isViewOnly: isViewOnly !== undefined ? Boolean(isViewOnly) : true,
       allowDownload: Boolean(allowDownload),
       isVisibleOnWebsite: isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : true,
       category: category || "Worksheets",
       level: level || "All Levels",
-      uploadedAt: new Date().toLocaleDateString('en-GB')
+      uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     };
 
     studyMaterials.unshift(newMat);
@@ -2304,8 +3822,8 @@ www.witslingo.com`
     res.json({ success: true, material: newMat, materials: studyMaterials });
   });
 
-  // 20d. ADMIN: Update Study Material (PDF Link & View-Only settings)
-  app.put("/api/admin/materials/:id", (req, res) => {
+  // 20d. ADMIN: Update Study Material (PDF Link, B2 references & Permissions)
+  app.put("/api/admin/materials/:id", async (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -2317,13 +3835,28 @@ www.witslingo.com`
       return res.status(404).json({ error: "Study material not found." });
     }
 
-    const { title, description, batchId, fileType, fileSize, pdfUrl, isViewOnly, allowDownload, isVisibleOnWebsite, category, level } = req.body;
+    const { 
+      title, description, batchId, classId, fileType, fileSize, 
+      pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
+      isViewOnly, allowDownload, isVisibleOnWebsite, category, level 
+    } = req.body;
+
+    // If replacing file with a new B2 upload, safely cleanup old B2 file if different
+    if (b2FileId && mat.b2FileId && b2FileId !== mat.b2FileId) {
+      deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
+    }
+
     if (title !== undefined) mat.title = title;
     if (description !== undefined) mat.description = description;
     if (batchId !== undefined) mat.batchId = batchId;
+    if (classId !== undefined) mat.classId = classId;
     if (fileType !== undefined) mat.fileType = fileType;
     if (fileSize !== undefined) mat.fileSize = fileSize;
     if (pdfUrl !== undefined) mat.pdfUrl = pdfUrl;
+    if (downloadUrl !== undefined && downloadUrl !== "#") mat.downloadUrl = downloadUrl;
+    if (b2FileId !== undefined) mat.b2FileId = b2FileId;
+    if (b2FileName !== undefined) mat.b2FileName = b2FileName;
+    if (mimeType !== undefined) mat.mimeType = mimeType;
     if (isViewOnly !== undefined) mat.isViewOnly = Boolean(isViewOnly);
     if (allowDownload !== undefined) mat.allowDownload = Boolean(allowDownload);
     if (isVisibleOnWebsite !== undefined) mat.isVisibleOnWebsite = Boolean(isVisibleOnWebsite);
@@ -2334,7 +3867,41 @@ www.witslingo.com`
     res.json({ success: true, material: mat, materials: studyMaterials });
   });
 
-  // 20c. ADMIN: Check Backblaze B2 Connection Status
+  // 20e. ADMIN: Delete Study Material with B2 Object Cleanup
+  app.delete("/api/admin/materials/:id", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    const { id } = req.params;
+    const idx = studyMaterials.findIndex(m => m.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "Study material not found." });
+    }
+
+    const mat = studyMaterials[idx];
+    if (mat.b2FileId || mat.b2FileName) {
+      deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
+    }
+
+    // Cleanup local disk copy if exists
+    try {
+      const diskPath1 = path.join(uploadsDir, `${id}.pdf`);
+      if (fs.existsSync(diskPath1)) fs.unlinkSync(diskPath1);
+      if (mat.b2FileName) {
+        const diskPath2 = path.join(uploadsDir, path.basename(mat.b2FileName));
+        if (fs.existsSync(diskPath2)) fs.unlinkSync(diskPath2);
+      }
+    } catch (e) {}
+
+    studyMaterials.splice(idx, 1);
+    savePersistedMaterials();
+
+    res.json({ success: true, message: "Study material deleted.", materials: studyMaterials });
+  });
+
+  // 20f. ADMIN: Check Backblaze B2 Connection Status
   app.get("/api/admin/b2-status", async (req, res) => {
     try {
       const native = await getB2NativeAuth();
@@ -2368,7 +3935,7 @@ www.witslingo.com`
     }
   });
 
-  // 20d. ADMIN: Upload PDF file directly from Gallery / Files
+  // 20g. ADMIN: Upload PDF / Study Material directly to Backblaze B2
   app.post("/api/admin/upload-file", async (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
@@ -2380,16 +3947,32 @@ www.witslingo.com`
       return res.status(400).json({ error: "No file data received." });
     }
 
-    const safeFilename = (filename || "document.pdf").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const rawFilename = (filename || "document.pdf").trim();
+    const ext = path.extname(rawFilename).toLowerCase() || ".pdf";
+
+    // Security check: disallow executable / malicious scripts
+    if (FORBIDDEN_EXEC_EXTS.has(ext)) {
+      return res.status(400).json({ error: `File type ${ext} is not allowed for security reasons.` });
+    }
+
+    const safeFilename = rawFilename.replace(/[^a-zA-Z0-9._-]/g, "_");
     const fileId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const resolvedMime = getSafeFileMimeType(safeFilename, mimeType);
 
     const base64Content = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
     const buffer = Buffer.from(base64Content, "base64");
 
+    // Max file size: 50MB
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(400).json({ error: "File exceeds maximum allowed size of 50 MB." });
+    }
+
     // Save to disk for durability / local fallback
     try {
-      const diskPath = path.join(uploadsDir, `${fileId}.pdf`);
+      const diskPath = path.join(uploadsDir, `${fileId}-${safeFilename}`);
       fs.writeFileSync(diskPath, buffer);
+      const diskPathShort = path.join(uploadsDir, `${fileId}.pdf`);
+      fs.writeFileSync(diskPathShort, buffer);
     } catch (err) {
       console.warn("Failed saving upload to disk:", err);
     }
@@ -2401,33 +3984,35 @@ www.witslingo.com`
     let finalUrl = `/api/files/pdf/${fileId}/${encodeURIComponent(safeFilename)}`;
     let uploadedToB2 = false;
     let b2FileId: string | undefined;
+    let b2FileName: string | undefined;
     let b2Url: string | undefined;
 
-    // Direct upload to Backblaze B2 (Supports both Master & App Keys)
+    // Direct upload to Backblaze B2 (Primary source of truth in cloud)
     try {
       const objectKey = `materials/${fileId}-${safeFilename}`;
-      const b2Res = await uploadBufferToB2(objectKey, buffer, mimeType || "application/pdf");
+      const b2Res = await uploadBufferToB2(objectKey, buffer, resolvedMime);
       if (b2Res.success) {
         uploadedToB2 = true;
         b2FileId = b2Res.fileId;
+        b2FileName = b2Res.fileName || objectKey;
         b2Url = b2Res.url;
-        // Keep finalUrl as `/api/files/pdf/${fileId}/${encodeURIComponent(safeFilename)}`
-        // so documents are served locally through the inline streaming endpoint without Chrome X-Frame-Options blocking.
       } else {
-        console.warn("B2 upload returned non-success, using local fallback:", b2Res.error);
+        console.warn("B2 upload returned non-success, local backup active:", b2Res.error);
       }
     } catch (b2Err: any) {
       console.warn("Failed uploading to Backblaze B2, fell back to local storage:", b2Err?.message);
     }
 
+    // Store reference in uploaded map (without heavy base64 payload to prevent memory bloat)
     uploadedPdfFiles.set(fileId, {
       id: fileId,
       filename: safeFilename,
-      mimeType: mimeType || "application/pdf",
+      mimeType: resolvedMime,
       size: buffer.length,
-      dataBase64: base64Content,
+      dataBase64: "", // Do not keep base64 in RAM
       uploadedAt: new Date().toISOString(),
       b2FileId,
+      b2FileName,
       b2Url,
     });
 
@@ -2436,61 +4021,218 @@ www.witslingo.com`
       fileId,
       filename: safeFilename,
       fileSize: formattedSize,
+      mimeType: resolvedMime,
       url: finalUrl,
+      downloadUrl: `/api/files/download/${fileId}`,
       uploadedToB2,
-      dataUrl: `data:application/pdf;base64,${base64Content}`
+      b2FileId,
+      b2FileName
     });
   });
 
-  // 20e. Serve uploaded PDF files with inline headers for protected reader
+  // 20h. Serve PDF / Document with inline headers for protected reader & preview
   app.get("/api/files/pdf/:id/:filename?", async (req, res) => {
-    const { id } = req.params;
+    const { id, filename: reqFilename } = req.params;
     let buffer: Buffer | null = null;
-    let filename = "document.pdf";
+    let filename = reqFilename || "document.pdf";
     let mimeType = "application/pdf";
 
+    // 1. Check if ID matches a DB study material
+    const mat = studyMaterials.find(m => m.id === id || m.pdfUrl?.includes(id));
     const memFile = uploadedPdfFiles.get(id);
-    if (memFile) {
-      buffer = Buffer.from(memFile.dataBase64, "base64");
-      filename = memFile.filename;
-      mimeType = memFile.mimeType || "application/pdf";
-    } else {
-      const diskPath = path.join(uploadsDir, `${id}.pdf`);
-      if (fs.existsSync(diskPath)) {
+
+    if (mat) {
+      filename = mat.title || filename;
+      mimeType = mat.mimeType || getSafeFileMimeType(filename);
+    } else if (memFile) {
+      filename = memFile.filename || filename;
+      mimeType = memFile.mimeType || getSafeFileMimeType(filename);
+    }
+
+    let extractedFileId: string | undefined;
+    if (mat?.pdfUrl && mat.pdfUrl.includes('/api/files/pdf/')) {
+      const match = mat.pdfUrl.match(/\/api\/files\/pdf\/([a-zA-Z0-9_-]+)/);
+      if (match) extractedFileId = match[1];
+    }
+
+    // 2. Check local disk storage
+    const possibleDiskPaths = [
+      path.join(uploadsDir, `${id}.pdf`),
+      path.join(uploadsDir, `${id}-${filename}`),
+      extractedFileId ? path.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+      extractedFileId ? path.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+      mat?.b2FileName ? path.join(uploadsDir, path.basename(mat.b2FileName)) : "",
+      memFile?.b2FileName ? path.join(uploadsDir, path.basename(memFile.b2FileName)) : "",
+    ].filter(Boolean);
+
+    for (const dp of possibleDiskPaths) {
+      if (fs.existsSync(dp)) {
         try {
-          buffer = fs.readFileSync(diskPath);
+          buffer = fs.readFileSync(dp);
+          break;
         } catch (e) {}
       }
     }
 
-    // If not in local cache or disk, retrieve from Backblaze B2
-    if (!buffer && memFile?.b2FileId) {
+    if (!buffer && (id || extractedFileId)) {
+      const searchPrefix = extractedFileId || id;
       try {
-        const b2 = await getB2NativeAuth();
-        if (b2) {
-          const dlRes = await fetch(`${b2.downloadUrl}/b2api/v3/b2_download_file_by_id?fileId=${memFile.b2FileId}`, {
-            headers: { Authorization: b2.authorizationToken }
-          });
-          if (dlRes.ok) {
-            buffer = Buffer.from(await dlRes.arrayBuffer());
-          }
+        const files = fs.readdirSync(uploadsDir);
+        const matchFile = files.find(f => f.startsWith(searchPrefix));
+        if (matchFile) {
+          buffer = fs.readFileSync(path.join(uploadsDir, matchFile));
+        }
+      } catch (e) {}
+    }
+
+    // 3. If not on disk, stream from Backblaze B2
+    const targetFileId = mat?.b2FileId || memFile?.b2FileId;
+    const targetFileName = mat?.b2FileName || memFile?.b2FileName || (id ? `materials/${id}-${filename}` : undefined);
+
+    if (!buffer && (targetFileId || targetFileName)) {
+      try {
+        const b2Res = await downloadBufferFromB2(targetFileId, targetFileName);
+        if (b2Res.success && b2Res.buffer) {
+          buffer = b2Res.buffer;
+          if (b2Res.contentType) mimeType = b2Res.contentType;
         }
       } catch (e) {
-        console.warn("Failed retrieving PDF from B2:", e);
+        console.warn("Failed retrieving document from B2:", e);
       }
     }
 
+    // 4. Fallback: If external URL in material
+    if (!buffer && mat?.pdfUrl && mat.pdfUrl.startsWith("http")) {
+      return res.redirect(`/api/proxy-pdf?url=${encodeURIComponent(mat.pdfUrl)}`);
+    }
+
     if (!buffer) {
-      return res.status(404).send("PDF document not found.");
+      return res.status(404).send("Document not found.");
     }
 
     res.setHeader("Content-Type", mimeType);
-    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
     res.setHeader("Content-Length", buffer.length);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.removeHeader("X-Frame-Options");
+    res.removeHeader("Content-Security-Policy");
     res.send(buffer);
+  });
+
+  // 20i. SECURE FILE DOWNLOAD ENDPOINT: Streams authorized file attachments
+  app.get("/api/files/download/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const rawToken = (req.headers.authorization?.replace(/^Bearer\s+/i, "") || req.query.token as string || "").trim();
+      const auth = rawToken ? verifyAuthToken(rawToken) : null;
+      const isAdmin = auth?.role === "admin";
+
+      // Find target material or uploaded file
+      const mat = studyMaterials.find(m => m.id === id || m.pdfUrl?.includes(id) || m.downloadUrl?.includes(id));
+      const memFile = uploadedPdfFiles.get(id);
+
+      if (!mat && !memFile && !isAdmin) {
+        return res.status(404).json({ error: "Requested study material was not found." });
+      }
+
+      // Check download permissions
+      if (mat) {
+        // If download is disabled and user is not admin
+        if (!mat.allowDownload && !isAdmin) {
+          return res.status(403).json({
+            error: "Downloads are restricted for this view-only study material.",
+            code: "DOWNLOAD_NOT_PERMITTED"
+          });
+        }
+
+        // If material is private to a batch and not publicly visible on website
+        if (!mat.isVisibleOnWebsite && !isAdmin) {
+          if (!auth) {
+            return res.status(401).json({ error: "Authentication required to download batch materials." });
+          }
+          const isEnrolled = auth.batchIds?.includes(mat.batchId) || mat.batchId === "all";
+          if (!isEnrolled) {
+            return res.status(403).json({ error: "Access Denied: You are not enrolled in this batch." });
+          }
+        }
+      }
+
+      const filename = mat?.title || memFile?.filename || "Study-Material.pdf";
+      const mimeType = mat?.mimeType || memFile?.mimeType || getSafeFileMimeType(filename);
+
+      let buffer: Buffer | null = null;
+
+      let extractedFileId: string | undefined;
+      if (mat?.pdfUrl && mat.pdfUrl.includes('/api/files/pdf/')) {
+        const match = mat.pdfUrl.match(/\/api\/files\/pdf\/([a-zA-Z0-9_-]+)/);
+        if (match) extractedFileId = match[1];
+      }
+
+      // 1. Check local disk storage
+      const possibleDiskPaths = [
+        path.join(uploadsDir, `${id}.pdf`),
+        path.join(uploadsDir, `${id}-${filename}`),
+        extractedFileId ? path.join(uploadsDir, `${extractedFileId}.pdf`) : "",
+        extractedFileId ? path.join(uploadsDir, `${extractedFileId}-${filename}`) : "",
+        mat?.b2FileName ? path.join(uploadsDir, path.basename(mat.b2FileName)) : "",
+        memFile?.b2FileName ? path.join(uploadsDir, path.basename(memFile.b2FileName)) : "",
+      ].filter(Boolean);
+
+      for (const dp of possibleDiskPaths) {
+        if (fs.existsSync(dp)) {
+          try {
+            buffer = fs.readFileSync(dp);
+            break;
+          } catch (e) {}
+        }
+      }
+
+      if (!buffer && (id || extractedFileId)) {
+        const searchPrefix = extractedFileId || id;
+        try {
+          const files = fs.readdirSync(uploadsDir);
+          const matchFile = files.find(f => f.startsWith(searchPrefix));
+          if (matchFile) {
+            buffer = fs.readFileSync(path.join(uploadsDir, matchFile));
+          }
+        } catch (e) {}
+      }
+
+      // 2. Stream directly from Backblaze B2
+      const targetFileId = mat?.b2FileId || memFile?.b2FileId;
+      const targetFileName = mat?.b2FileName || memFile?.b2FileName || `materials/${id}-${filename}`;
+
+      if (!buffer && (targetFileId || targetFileName)) {
+        try {
+          const b2Res = await downloadBufferFromB2(targetFileId, targetFileName);
+          if (b2Res.success && b2Res.buffer) {
+            buffer = b2Res.buffer;
+          }
+        } catch (b2Err) {
+          console.warn("B2 download error:", b2Err);
+        }
+      }
+
+      // 3. Fallback: If external Google Drive / cloud URL
+      if (!buffer && mat?.pdfUrl && mat.pdfUrl.startsWith("http")) {
+        return res.redirect(mat.pdfUrl);
+      }
+
+      if (!buffer) {
+        return res.status(404).json({ error: "File content could not be retrieved." });
+      }
+
+      const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader("Content-Length", buffer.length);
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.send(buffer);
+    } catch (err: any) {
+      console.error("Error serving secure download:", err);
+      res.status(500).json({ error: "Internal error processing download request." });
+    }
   });
 
   // 20f. Safe Document Proxy: Streams external PDFs (Backblaze B2, external URLs) 
@@ -2678,7 +4420,9 @@ www.witslingo.com`
       const userIdx = users.findIndex(u => u.admissionId === reg.admissionId || u.email === reg.email);
       if (userIdx !== -1) {
         users.splice(userIdx, 1);
+        saveUsers();
       }
+      saveRegistrations();
       return res.json({ success: true, message: "Student admission deleted successfully." });
     }
     res.status(404).json({ error: "Student registration not found." });
@@ -2695,6 +4439,7 @@ www.witslingo.com`
     if (!reg) return res.status(404).json({ error: "Student registration not found." });
 
     Object.assign(reg, req.body);
+    saveRegistrations();
     res.json({ success: true, student: reg });
   });
 
@@ -2709,6 +4454,7 @@ www.witslingo.com`
     if (!batch) return res.status(404).json({ error: "Batch not found." });
 
     Object.assign(batch, req.body);
+    saveBatches();
     res.json({ success: true, batch });
   });
 
@@ -2722,6 +4468,7 @@ www.witslingo.com`
     const idx = batches.findIndex(b => b.id === id);
     if (idx !== -1) {
       batches.splice(idx, 1);
+      saveBatches();
       return res.json({ success: true, message: "Batch deleted successfully." });
     }
     res.status(404).json({ error: "Batch not found." });

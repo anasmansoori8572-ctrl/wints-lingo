@@ -9,7 +9,16 @@ interface PdfUploadInputProps {
   pdfUrl: string;
   onPdfUrlChange: (url: string) => void;
   token?: string;
-  onFileUploaded?: (meta: { filename: string; fileSize: string; url: string; dataUrl: string }) => void;
+  onFileUploaded?: (meta: { 
+    filename: string; 
+    fileSize: string; 
+    url: string; 
+    dataUrl?: string;
+    downloadUrl?: string;
+    b2FileId?: string;
+    b2FileName?: string;
+    mimeType?: string;
+  }) => void;
   onPreviewTest?: (url: string) => void;
   titleValue?: string;
   onTitleSuggest?: (title: string) => void;
@@ -62,7 +71,7 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
   const processFile = async (file: File) => {
     if (!file) return;
 
-    // Validate type (must be PDF)
+    // Validate type (must be PDF or supported study format)
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!isPdf) {
       setUploadError('Please select a valid PDF document (.pdf).');
@@ -98,8 +107,13 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
         reader.readAsDataURL(file);
       });
 
-      // Try uploading to server endpoint
+      // Try uploading to server endpoint & Backblaze B2
       let serverUrl = '';
+      let serverDownloadUrl = '';
+      let b2FileId: string | undefined;
+      let b2FileName: string | undefined;
+      let returnedMime: string | undefined;
+
       try {
         const response = await fetch('/api/admin/upload-file', {
           method: 'POST',
@@ -110,7 +124,7 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
           body: JSON.stringify({
             filename: cleanFilename,
             dataBase64: dataUrl,
-            mimeType: 'application/pdf'
+            mimeType: file.type || 'application/pdf'
           })
         });
 
@@ -119,6 +133,15 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
           if (resData.url) {
             serverUrl = resData.url;
           }
+          if (resData.downloadUrl) {
+            serverDownloadUrl = resData.downloadUrl;
+          }
+          b2FileId = resData.b2FileId;
+          b2FileName = resData.b2FileName;
+          returnedMime = resData.mimeType;
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          console.warn('Server upload error:', errData?.error);
         }
       } catch (networkErr) {
         console.warn('Server upload fallback to direct data URL:', networkErr);
@@ -133,7 +156,11 @@ export const PdfUploadInput: React.FC<PdfUploadInputProps> = ({
           filename: cleanFilename,
           fileSize: formattedSize,
           url: finalUrl,
-          dataUrl
+          dataUrl,
+          downloadUrl: serverDownloadUrl,
+          b2FileId,
+          b2FileName,
+          mimeType: returnedMime || file.type || 'application/pdf'
         });
       }
     } catch (err: any) {

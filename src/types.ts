@@ -40,6 +40,12 @@ export interface StudentRegistration {
   paymentCurrency?: string;
   paymentAmountFormatted?: string;
   paymentTxnId: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
+  googleMeetLink?: string;
+  whatsappDeliveryStatus?: 'pending' | 'sent' | 'failed';
+  whatsappMessageId?: string;
   registeredAt: string;
 }
 
@@ -61,6 +67,7 @@ export interface Batch {
   recordingsExpiryDate?: string;
   description?: string;
   isVisibleOnWebsite?: boolean;
+  googleMeetLink?: string;
 }
 
 export interface ClassSession {
@@ -113,6 +120,9 @@ export interface StudyMaterial {
   fileSize: string;
   downloadUrl: string;
   pdfUrl?: string;
+  b2FileId?: string;
+  b2FileName?: string;
+  mimeType?: string;
   isViewOnly?: boolean;
   allowDownload?: boolean;
   uploadedAt: string;
@@ -228,6 +238,22 @@ export interface ResourceItem {
   isUploaded?: boolean;
 }
 
+export interface GalleryItem {
+  id: string;
+  title?: string;
+  caption?: string;
+  category?: string; // e.g. 'Classrooms', 'Live Sessions', 'Events & Workshops', 'Student Activities', 'Community', 'General'
+  imageUrl: string;
+  thumbnailUrl?: string;
+  b2FileId?: string;
+  b2FileName?: string;
+  isPublished: boolean;
+  displayOrder: number;
+  uploadedAt: string;
+  uploadedBy?: string;
+  fileSize?: string;
+}
+
 export interface SiteSettings {
   academyName: string;
   tagline: string;
@@ -261,4 +287,23 @@ export interface SiteSettings {
   upiNumber?: string; // Google Pay / PhonePe / Paytm registered number
   razorpayPaymentLink?: string;
   paypalEmailOrLink?: string;
+
+  // Hero Video Management
+  heroVideoUrl?: string;
+  heroVideoPosterUrl?: string;
+
+  // Razorpay Public Configuration
+  razorpayKeyId?: string;
+}
+
+export interface RazorpayOrderResponse {
+  success: boolean;
+  orderId?: string;
+  amount?: number;
+  currency?: string;
+  keyId?: string;
+  courseName?: string;
+  batchName?: string;
+  error?: string;
+  requiresConfig?: boolean;
 }

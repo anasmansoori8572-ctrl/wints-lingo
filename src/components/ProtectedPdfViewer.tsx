@@ -4,7 +4,7 @@ import {
   X, ZoomIn, ZoomOut, RotateCcw, Maximize2, Minimize2, 
   ShieldCheck, Lock, AlertCircle, BookOpen, FileText, 
   ChevronLeft, ChevronRight, Moon, Sun, Sparkles, CheckCircle2,
-  ExternalLink, AlertTriangle, RefreshCw
+  ExternalLink, AlertTriangle, RefreshCw, Download
 } from 'lucide-react';
 import { optimizePdfUrl } from '../utils/pdfOptimizer';
 import { getCurriculumForDocument } from '../data/resourceCurriculumContent';
@@ -292,6 +292,23 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
                 <Moon className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {/* Download Button (Only when allowed) */}
+            {allowDownload && optimization.originalUrl && (
+              <a
+                href={optimization.originalUrl.includes('/api/files/pdf/') 
+                  ? optimization.originalUrl.replace('/api/files/pdf/', '/api/files/download/') 
+                  : (optimization.originalUrl.startsWith('http') ? optimization.originalUrl : `/api/files/download/${encodeURIComponent(title)}`)}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-xl text-emerald-700 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Download Material"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Download</span>
+              </a>
+            )}
 
             {/* Open in Tab Button */}
             {optimization.originalUrl && (
