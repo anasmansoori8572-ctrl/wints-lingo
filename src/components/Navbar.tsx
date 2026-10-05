@@ -80,16 +80,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               {siteSettings?.announcementText || 'New Batch Starts from 1st of each month • Admissions Open for October & November 2026'}
             </span>
           </div>
-          {onOpenSystemReport && (
-            <button
-              onClick={onOpenSystemReport}
-              className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold border border-white/20 transition-all cursor-pointer flex-shrink-0"
-              title="Download Full Website Report & Documentation (PDF)"
-            >
-              <FileText className="w-3 h-3 text-purple-200" />
-              <span>Report PDF</span>
-            </button>
-          )}
         </div>
       )}
 
@@ -144,17 +134,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Buttons */}
           <div className="hidden sm:flex items-center space-x-2.5">
-            {onOpenSystemReport && (
-              <button
-                onClick={onOpenSystemReport}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-[#4A1D96] border border-slate-200 hover:border-purple-200 transition-all cursor-pointer"
-                title="Download full report of the website as PDF"
-              >
-                <FileText className="w-3.5 h-3.5 text-purple-700" />
-                <span>Website Report (PDF)</span>
-              </button>
-            )}
-
             {currentUser && currentUser.role !== 'admin' && (
               <div className="flex items-center space-x-2">
                 <button
@@ -180,16 +159,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Mobile menu trigger */}
           <div className="lg:hidden flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {onOpenSystemReport && (
-              <button
-                onClick={onOpenSystemReport}
-                className="p-1.5 text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-lg text-xs font-medium flex items-center gap-1 border border-purple-200"
-                title="Download PDF Report"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span className="hidden xs:inline">Report</span>
-              </button>
-            )}
             <button
               onClick={() => onOpenAdmission()}
               className="sm:hidden px-3.5 py-1.5 rounded-full bg-[#4A1D96] text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all cursor-pointer whitespace-nowrap"

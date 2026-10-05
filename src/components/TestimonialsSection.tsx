@@ -82,12 +82,7 @@ export const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ testim
           </div>
         )}
 
-        {/* Community Proof */}
-        <div className="mt-12 text-center">
-          <p className="text-xs sm:text-sm text-slate-500 font-medium">
-            Join 100+ motivated learners in our upcoming batches. Limited seats per batch for personal speaking attention.
-          </p>
-        </div>
+
 
       </div>
     </section>

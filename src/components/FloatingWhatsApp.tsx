@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Send, Sparkles, MessageCircle, Volume2, VolumeX } from 'lucide-react';
+import { X, Send, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { Logo } from './Logo';
 
 interface FloatingWhatsAppProps {
   phoneNumber?: string;
@@ -159,12 +160,7 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className="w-10 h-10 rounded-full overflow-hidden bg-white/20 border-2 border-white/40 flex items-center justify-center p-0.5 shadow-sm">
-                    <img
-                      src="/logo.svg"
-                      alt="Wits Lingo"
-                      className="w-full h-full object-contain rounded-full"
-                      referrerPolicy="no-referrer"
-                    />
+                    <Logo iconOnly={true} size="sm" />
                   </div>
                   {/* Pulsing online status indicator */}
                   <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#25D366] border-2 border-white rounded-full">
@@ -336,13 +332,6 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
         >
           {/* Subtle radar pulse ring */}
           <span className="absolute -inset-1 rounded-full bg-[#25D366] opacity-30 group-hover:opacity-50 animate-ping pointer-events-none" />
-
-          {/* Unread Message Notification Badge */}
-          {!isOpen && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white font-extrabold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-bounce">
-              1
-            </span>
-          )}
 
           {/* Icon Switch */}
           {isOpen ? (

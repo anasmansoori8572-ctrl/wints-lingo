@@ -23,17 +23,94 @@ import { AdmissionModal } from './components/AdmissionModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentDashboard } from './components/StudentDashboard';
 import { AdminPanel } from './components/AdminPanel';
+import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
 
+type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+
+function parseAdminSubroute(path: string, hash: string): AdminTabType | undefined {
+  const p = path.toLowerCase();
+  const h = hash.toLowerCase();
+  const raw = p.startsWith('/admin') ? p.replace(/^\/admin\/?/, '') : h.startsWith('#admin') ? h.replace(/^#admin\/?/, '') : '';
+  const sub = raw.split('/')[0]?.split('?')[0];
+  if (!sub) return undefined;
+  if (sub === 'courses') return 'courses';
+  if (sub === 'batches') return 'batches';
+  if (sub === 'students' || sub === 'admissions') return 'students';
+  if (sub === 'resources' || sub === 'materials' || sub === 'notes' || sub === 'pdfs') return 'materials';
+  if (sub === 'gallery') return 'gallery';
+  if (sub === 'hero-video' || sub === 'video') return 'hero-video';
+  if (sub === 'classes') return 'classes';
+  if (sub === 'recordings') return 'recordings';
+  if (sub === 'testimonials' || sub === 'reviews') return 'testimonials';
+  if (sub === 'announcements' || sub === 'notices') return 'announcements';
+  if (sub === 'settings' || sub === 'logo' || sub === 'cms') return 'settings';
+  return undefined;
+}
+
 export default function App() {
-  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery'
-  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery'>('home');
+  // Navigation View: 'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login'
+  const [currentView, setCurrentView] = useState<'home' | 'student-dashboard' | 'admin-panel' | 'gallery' | 'admin-login'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      if (path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin')) {
+        const savedUserStr = localStorage.getItem('wits_lingo_user');
+        const savedToken = localStorage.getItem('wits_lingo_token');
+        if (savedUserStr && savedToken) {
+          try {
+            const u = JSON.parse(savedUserStr);
+            if (u.role === 'admin') return 'admin-panel';
+          } catch (e) {}
+        }
+        return 'admin-login';
+      }
+      if (path === '/gallery' || path.startsWith('/gallery') || hash === '#gallery') {
+        return 'gallery';
+      }
+    }
+    return 'home';
+  });
+
+  const [adminTab, setAdminTab] = useState<AdminTabType | undefined>(() => {
+    if (typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      return parseAdminSubroute(path, hash);
+    }
+    return undefined;
+  });
+
+  const [isVerifyingAdminSession, setIsVerifyingAdminSession] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      const isAdminRoute = path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin');
+      const savedToken = localStorage.getItem('wits_lingo_token');
+      if (isAdminRoute && savedToken) return true;
+    }
+    return false;
+  });
 
   // Authentication State
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('wits_lingo_user');
+      if (savedUser) {
+        try { return JSON.parse(savedUser); } catch (e) {}
+      }
+    }
+    return null;
+  });
+
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('wits_lingo_token');
+    }
+    return null;
+  });
 
   // Modals
   const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
@@ -73,12 +150,16 @@ export default function App() {
       const saved = localStorage.getItem('wits_lingo_site_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
+        const merged = {
           ...INITIAL_SITE_SETTINGS,
           ...parsed,
           academyName: (parsed.academyName === 'Wits Lingo Academy' || !parsed.academyName) ? 'WITS LINGO' : parsed.academyName,
           tagline: 'A Global Language Platform',
         };
+        if (!merged.youtubeUrl || merged.youtubeUrl.includes('@witslingo') && !merged.youtubeUrl.includes('@witslingoeng')) {
+          merged.youtubeUrl = 'https://youtube.com/@witslingoeng';
+        }
+        return merged;
       }
     } catch (e) {}
     return INITIAL_SITE_SETTINGS;
@@ -95,7 +176,21 @@ export default function App() {
   const [materials, setMaterials] = useState<StudyMaterial[]>(() => {
     try {
       const saved = localStorage.getItem('wits_lingo_materials');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((m: any) => {
+            if (m.resourceType === 'youtube' || m.youtubeUrl) {
+              if (m.id === 'yt-01' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=ZFuoc6aEn3w';
+              if (m.id === 'yt-02' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=Xk1gQdbSYic';
+              if (m.id === 'yt-03' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=mImWmss_7Gw';
+              if (m.id === 'yt-04' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=K8PYUbGdazY';
+              if (m.id === 'yt-05' && (!m.youtubeUrl || m.youtubeUrl.includes('@witslingo'))) m.youtubeUrl = 'https://www.youtube.com/watch?v=8yfe0F74q6M';
+            }
+            return m;
+          });
+        }
+      }
     } catch (e) {}
     return [];
   });
@@ -145,17 +240,85 @@ export default function App() {
 
   // Check saved session & fetch materials on mount
   useEffect(() => {
+    const path = (window.location.pathname || '').toLowerCase();
+    const hash = (window.location.hash || '').toLowerCase();
+    const isAdminRoute = path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin');
+    
+    if (isAdminRoute) {
+      const sub = parseAdminSubroute(path, hash);
+      if (sub) setAdminTab(sub);
+    }
+
     const savedUser = localStorage.getItem('wits_lingo_user');
     const savedToken = localStorage.getItem('wits_lingo_token');
-    if (savedUser && savedToken) {
-      try {
-        const u = JSON.parse(savedUser);
-        setCurrentUser(u);
-        setAuthToken(savedToken);
-      } catch (e) {
-        localStorage.removeItem('wits_lingo_user');
-        localStorage.removeItem('wits_lingo_token');
-      }
+
+    if (isAdminRoute && savedToken) {
+      setIsVerifyingAdminSession(true);
+    }
+
+    // Verify session authenticity with backend
+    if (savedToken) {
+      fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${savedToken}` }
+      })
+        .then(res => {
+          if (!res.ok) {
+            localStorage.removeItem('wits_lingo_user');
+            localStorage.removeItem('wits_lingo_token');
+            setCurrentUser(null);
+            setAuthToken(null);
+            if (isAdminRoute) {
+              setCurrentView('admin-login');
+            }
+          } else {
+            return res.json();
+          }
+        })
+        .then(data => {
+          if (data?.user) {
+            setCurrentUser(data.user);
+            setAuthToken(savedToken);
+            localStorage.setItem('wits_lingo_user', JSON.stringify(data.user));
+            if (isAdminRoute && data.user.role === 'admin') {
+              setCurrentView('admin-panel');
+            }
+          }
+        })
+        .catch(() => {
+          if (savedUser) {
+            try {
+              const u = JSON.parse(savedUser);
+              setCurrentUser(u);
+              setAuthToken(savedToken);
+            } catch (e) {}
+          }
+        })
+        .finally(() => {
+          setIsVerifyingAdminSession(false);
+        });
+    } else if (isAdminRoute) {
+      // Check cookie session fallback
+      setIsVerifyingAdminSession(true);
+      fetch('/api/auth/me')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.user && data.user.role === 'admin') {
+            setCurrentUser(data.user);
+            const tok = data.token || 'admin-session';
+            setAuthToken(tok);
+            localStorage.setItem('wits_lingo_user', JSON.stringify(data.user));
+            localStorage.setItem('wits_lingo_token', tok);
+            setCurrentView('admin-panel');
+          } else {
+            setCurrentView('admin-login');
+          }
+        })
+        .catch(() => {
+          setCurrentView('admin-login');
+        })
+        .finally(() => {
+          setIsVerifyingAdminSession(false);
+        });
     }
 
     // Fetch live courses catalog from backend
@@ -180,14 +343,55 @@ export default function App() {
       })
       .catch(err => console.warn('Could not load materials in App:', err));
 
-    // Handle URL path / hash navigation for /gallery, /admin, #gallery
+    // Fetch CMS settings (including active central logo)
+    fetch('/api/cms/content')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.content?.settings) {
+          setSiteSettings(prev => {
+            const merged = { ...prev, ...data.content.settings };
+            localStorage.setItem('wits_lingo_site_settings', JSON.stringify(merged));
+            if (data.content.settings.logoUrl) {
+              window.dispatchEvent(new CustomEvent('wits_lingo_logo_updated', {
+                detail: {
+                  logoUrl: data.content.settings.logoUrl,
+                  logoVersion: data.content.settings.logoVersion
+                }
+              }));
+            }
+            return merged;
+          });
+        }
+      })
+      .catch(err => console.warn('Could not sync CMS settings in App:', err));
+
+    // Handle URL path / hash navigation for /gallery, /admin, #gallery, #admin
     const handleUrlChange = () => {
       const hash = (window.location.hash || '').toLowerCase();
       const path = (window.location.pathname || '').toLowerCase();
-      if (hash === '#gallery' || path === '/gallery' || path.startsWith('/gallery')) {
+
+      const savedUserStr = localStorage.getItem('wits_lingo_user');
+      const savedToken = localStorage.getItem('wits_lingo_token');
+      let isAdminLoggedIn = false;
+      if (savedUserStr && savedToken) {
+        try {
+          const u = JSON.parse(savedUserStr);
+          if (u.role === 'admin') isAdminLoggedIn = true;
+        } catch (e) {}
+      }
+
+      if (path === '/admin' || path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#admin')) {
+        const sub = parseAdminSubroute(path, hash);
+        if (sub) setAdminTab(sub);
+        if (isAdminLoggedIn) {
+          setCurrentView('admin-panel');
+        } else {
+          setCurrentView('admin-login');
+        }
+      } else if (hash === '#gallery' || path === '/gallery' || path.startsWith('/gallery')) {
         setCurrentView('gallery');
       } else if (hash === '#home' || path === '/') {
-        if (currentView === 'gallery') setCurrentView('home');
+        setCurrentView(prev => (prev === 'gallery' || prev === 'admin-login' ? 'home' : prev));
       }
     };
 
@@ -208,6 +412,10 @@ export default function App() {
     localStorage.setItem('wits_lingo_token', token);
 
     if (user.role === 'admin') {
+      const targetUrl = adminTab ? `/admin/${adminTab}` : '/admin';
+      try {
+        window.history.pushState(null, '', targetUrl);
+      } catch (e) {}
       setCurrentView('admin-panel');
     } else {
       setCurrentView('student-dashboard');
@@ -215,12 +423,29 @@ export default function App() {
   };
 
   // Handle Logout
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const wasAdmin = currentUser?.role === 'admin' || currentView === 'admin-panel' || window.location.pathname.startsWith('/admin');
+    
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+
     setCurrentUser(null);
     setAuthToken(null);
     localStorage.removeItem('wits_lingo_user');
     localStorage.removeItem('wits_lingo_token');
-    setCurrentView('home');
+
+    if (wasAdmin) {
+      try {
+        window.history.pushState(null, '', '/admin');
+      } catch (e) {}
+      setCurrentView('admin-login');
+    } else {
+      try {
+        window.history.pushState(null, '', '/');
+      } catch (e) {}
+      setCurrentView('home');
+    }
   };
 
   // Open Admission Modal
@@ -244,6 +469,32 @@ export default function App() {
     }
   };
 
+  if (isVerifyingAdminSession) {
+    return (
+      <div className="min-h-screen bg-[#0F0A1C] text-white flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-10 h-10 border-3 border-purple-500/20 border-t-purple-500 rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-purple-200 uppercase tracking-widest font-['Outfit']">
+            Verifying Administrator Session...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'admin-login') {
+    return (
+      <AdminLoginPage
+        onLoginSuccess={handleLoginSuccess}
+        onBackToHome={() => {
+          try { window.history.pushState(null, '', '/'); } catch (e) {}
+          setCurrentView('home');
+        }}
+        siteSettings={siteSettings}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white text-slate-900 font-['Plus_Jakarta_Sans'] selection:bg-purple-100 selection:text-purple-900">
       
@@ -264,7 +515,8 @@ export default function App() {
           if (currentUser && currentUser.role === 'admin') {
             setCurrentView('admin-panel');
           } else {
-            handleOpenAuth('admin');
+            try { window.history.pushState(null, '', '/admin'); } catch (e) {}
+            setCurrentView('admin-login');
           }
         }}
         onLogout={handleLogout}
@@ -295,6 +547,8 @@ export default function App() {
         <AdminPanel
           currentUser={currentUser}
           token={authToken}
+          initialTab={adminTab}
+          onTabChange={(tab) => setAdminTab(tab as any)}
           onLogout={handleLogout}
           onBackToHome={() => {
             try { window.history.pushState(null, '', '/'); } catch (e) {}
@@ -395,15 +649,8 @@ export default function App() {
         </main>
       )}
 
-      {/* Universal Institutional Footer with Admin Link */}
+      {/* Universal Institutional Footer */}
       <Footer
-        onOpenAdmin={() => {
-          if (currentUser && currentUser.role === 'admin') {
-            setCurrentView('admin-panel');
-          } else {
-            handleOpenAuth('admin');
-          }
-        }}
         onOpenSystemReport={() => setIsSystemReportOpen(true)}
         onNavigateGallery={() => {
           try { window.history.pushState(null, '', '/gallery'); } catch (e) {}

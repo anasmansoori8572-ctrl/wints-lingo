@@ -287,7 +287,7 @@ export const ResourcesSection: React.FC = () => {
             category={viewingResource.category}
             description={viewingResource.description}
             studentName="Wits Lingo Learner"
-            allowDownload={false}
+            allowDownload={true}
           />
         )}
 

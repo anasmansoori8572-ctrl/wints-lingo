@@ -4,6 +4,7 @@ import crypto from "crypto";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { WITS_LINGO_CONFIG } from "./src/config/witsLingoConfig";
 
 let s3ClientInstance: S3Client | null = null;
 
@@ -331,7 +332,7 @@ async function deleteFileFromB2(fileId?: string, fileName?: string): Promise<{ s
   return { success: false, error: "Could not delete file from Backblaze B2" };
 }
 
-const ALLOWED_MATERIAL_EXTS = new Set([".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".epub", ".zip"]);
+const ALLOWED_MATERIAL_EXTS = new Set([".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".epub", ".zip", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"]);
 const FORBIDDEN_EXEC_EXTS = new Set([".exe", ".sh", ".bat", ".cmd", ".js", ".ts", ".vbs", ".msi", ".jar", ".py", ".bin"]);
 
 function getSafeFileMimeType(filename: string, providedMime?: string): string {
@@ -344,23 +345,52 @@ function getSafeFileMimeType(filename: string, providedMime?: string): string {
   if (ext === ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   if (ext === ".epub") return "application/epub+zip";
   if (ext === ".zip") return "application/zip";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".svg") return "image/svg+xml";
   if (providedMime && providedMime.includes("/")) return providedMime;
   return "application/octet-stream";
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "witslingo_academy_secure_signing_key_2026";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || "admin";
+
+function hashPassword(password: string, salt: string = "witslingo_salt_2026"): string {
+  return crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
+}
+
+function verifyPassword(inputPassword: string, storedHashOrPlain: string, salt: string = "witslingo_salt_2026"): boolean {
+  if (!inputPassword || !storedHashOrPlain) return false;
+  if (inputPassword === storedHashOrPlain) return true;
+  try {
+    const hashed = hashPassword(inputPassword, salt);
+    if (hashed === storedHashOrPlain) return true;
+  } catch {}
+  return false;
+}
 
 // In-memory persistent database for Wits Lingo Academy
 interface DBUser {
   id: string;
   name: string;
   email: string;
+  username?: string;
   passwordHash: string;
   role: "student" | "teacher" | "admin";
   phone: string;
   batchIds: string[];
   admissionId?: string;
   registrationDate?: string;
+}
+
+function isValidGoogleMeetUrl(url?: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  return /^https?:\/\/(meet\.google\.com\/[a-z0-9\-]+|([a-z0-9\-]+\.)?google\.com\/[^\s]+)/i.test(trimmed);
 }
 
 interface DBStudentRegistration {
@@ -394,8 +424,11 @@ interface DBStudentRegistration {
   razorpayPaymentId?: string;
   razorpaySignature?: string;
   googleMeetLink?: string;
-  whatsappDeliveryStatus?: "pending" | "sent" | "failed";
+  whatsappDeliveryStatus?: "pending" | "sent" | "failed" | "skipped";
   whatsappMessageId?: string;
+  whatsappSentAt?: string;
+  whatsappError?: string;
+  facilities?: string[];
   registeredAt: string;
   whatsappConfirmationMessage?: string;
   whatsappStudentUrl?: string;
@@ -425,6 +458,21 @@ interface DBPayment {
   rawPayload?: any;
 }
 
+interface DBCourse {
+  id: string;
+  name: string;
+  level: string;
+  shortDescription: string;
+  whatYouWillLearn: string[];
+  facilities?: string[];
+  duration: string;
+  learningFormat: string;
+  fee: number;
+  badge?: string;
+  isPublished?: boolean;
+  order?: number;
+}
+
 interface DBBatch {
   id: string;
   name: string;
@@ -435,6 +483,8 @@ interface DBBatch {
   endDate: string;
   teacherName: string;
   scheduleTime: string;
+  classTime?: string;
+  scheduleInfo?: string;
   maxStudents: number;
   currentStudentsCount: number;
   enrolledCount?: number;
@@ -444,6 +494,7 @@ interface DBBatch {
   description?: string;
   isVisibleOnWebsite?: boolean;
   googleMeetLink?: string;
+  meetLink?: string;
 }
 
 interface DBClass {
@@ -483,6 +534,7 @@ interface DBRecording {
 
 interface DBStudyMaterial {
   id: string;
+  resourceType?: "pdf" | "youtube";
   batchId: string;
   classId?: string;
   title: string;
@@ -497,10 +549,20 @@ interface DBStudyMaterial {
   isViewOnly?: boolean;
   allowDownload?: boolean;
   isVisibleOnWebsite?: boolean;
+  isPublished?: boolean;
+  displayOrder?: number;
   category?: string;
   level?: string;
   uploadedAt: string;
   uploadedDate?: string;
+  youtubeUrl?: string;
+  thumbnailUrl?: string;
+  b2ThumbnailId?: string;
+  b2ThumbnailName?: string;
+  duration?: string;
+  views?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface DBAssignment {
@@ -1081,6 +1143,111 @@ const studyMaterials: DBStudyMaterial[] = [
     category: "Foundation & Phonics",
     level: "Beginner",
     uploadedAt: "11 Sept 2026"
+  },
+  {
+    id: "yt-01",
+    resourceType: "youtube",
+    batchId: "all",
+    title: "Sound of C as “K” and “S” |",
+    description: "Master the pronunciation rules of the letter 'C' producing /k/ and /s/ sounds in spoken English.",
+    fileType: "youtube",
+    fileSize: "Video",
+    downloadUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
+    category: "Pronunciation & Phonics",
+    level: "All Levels",
+    uploadedAt: "15 Sept 2026",
+    uploadedDate: "15 Sept 2026",
+    youtubeUrl: "https://www.youtube.com/watch?v=ZFuoc6aEn3w",
+    thumbnailUrl: "https://img.youtube.com/vi/ZFuoc6aEn3w/hqdefault.jpg",
+    duration: "00:58",
+    views: "Wits Lingo",
+    displayOrder: 1,
+    isPublished: true,
+    isVisibleOnWebsite: true
+  },
+  {
+    id: "yt-02",
+    resourceType: "youtube",
+    batchId: "all",
+    title: "English & Society 🫣😅 | English seekhna hi padega.",
+    description: "Why spoken English fluency is crucial in modern professional, social, and academic settings.",
+    fileType: "youtube",
+    fileSize: "Video",
+    downloadUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
+    category: "Spoken English & Fluency",
+    level: "All Levels",
+    uploadedAt: "18 Sept 2026",
+    uploadedDate: "18 Sept 2026",
+    youtubeUrl: "https://www.youtube.com/watch?v=Xk1gQdbSYic",
+    thumbnailUrl: "https://img.youtube.com/vi/Xk1gQdbSYic/hqdefault.jpg",
+    duration: "00:55",
+    views: "Wits Lingo",
+    displayOrder: 2,
+    isPublished: true,
+    isVisibleOnWebsite: true
+  },
+  {
+    id: "yt-03",
+    resourceType: "youtube",
+    batchId: "all",
+    title: "Why you can't improve your English | listen to it carefully",
+    description: "Core psychological and habit mistakes that hold back English learners from achieving natural fluency.",
+    fileType: "youtube",
+    fileSize: "Video",
+    downloadUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
+    category: "Learning Mindset",
+    level: "All Levels",
+    uploadedAt: "20 Sept 2026",
+    uploadedDate: "20 Sept 2026",
+    youtubeUrl: "https://www.youtube.com/watch?v=mImWmss_7Gw",
+    thumbnailUrl: "https://img.youtube.com/vi/mImWmss_7Gw/hqdefault.jpg",
+    duration: "00:59",
+    views: "Wits Lingo",
+    displayOrder: 3,
+    isPublished: true,
+    isVisibleOnWebsite: true
+  },
+  {
+    id: "yt-04",
+    resourceType: "youtube",
+    batchId: "all",
+    title: "English Learning isn't hard, but to choose a right way | Learn English With Wits Lingo Team",
+    description: "Step-by-step guidance on choosing the right structured approach to learn English speaking effectively.",
+    fileType: "youtube",
+    fileSize: "Video",
+    downloadUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
+    category: "English Foundations",
+    level: "All Levels",
+    uploadedAt: "22 Sept 2026",
+    uploadedDate: "22 Sept 2026",
+    youtubeUrl: "https://www.youtube.com/watch?v=K8PYUbGdazY",
+    thumbnailUrl: "https://img.youtube.com/vi/K8PYUbGdazY/hqdefault.jpg",
+    duration: "00:52",
+    views: "Wits Lingo",
+    displayOrder: 4,
+    isPublished: true,
+    isVisibleOnWebsite: true
+  },
+  {
+    id: "yt-05",
+    resourceType: "youtube",
+    batchId: "all",
+    title: "Bhai, English Seekho, chahen jaha se Seekho.😅 | Wits Lingo",
+    description: "Practical encouragement and motivation to build everyday English speaking habits without hesitation.",
+    fileType: "youtube",
+    fileSize: "Video",
+    downloadUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
+    category: "Daily Motivation",
+    level: "All Levels",
+    uploadedAt: "25 Sept 2026",
+    uploadedDate: "25 Sept 2026",
+    youtubeUrl: "https://www.youtube.com/watch?v=8yfe0F74q6M",
+    thumbnailUrl: "https://img.youtube.com/vi/8yfe0F74q6M/hqdefault.jpg",
+    duration: "00:48",
+    views: "Wits Lingo",
+    displayOrder: 5,
+    isPublished: true,
+    isVisibleOnWebsite: true
   }
 ];
 
@@ -1247,6 +1414,13 @@ let cmsContent: any = {
         "Simple subject-verb sentence framing without translation",
         "Overcoming stage fear & basic self-introduction"
       ],
+      facilities: [
+        "40 Live Online Classroom Sessions with Zia Sir",
+        "Foundational Phonics & Grammar Workbook (PDF)",
+        "60-Day Full Lecture Recordings Access",
+        "Daily Speaking Drills & Overcoming Hesitation",
+        "1-on-1 Pronunciation & MTI Correction Guidance"
+      ],
       duration: "2 Months (40 Sessions)",
       learningFormat: "Live Online Classroom (Evening Batches)",
       fee: 1199,
@@ -1263,6 +1437,13 @@ let cmsContent: any = {
         "Conversational drills for market, bank, travel & social events",
         "Elimination of mother-tongue influence (MTI)",
         "Thinking directly in English during daily conversations"
+      ],
+      facilities: [
+        "50 Live Interactive Speaking Sessions with Zia Sir",
+        "100+ Real Life Conversation Dialogue Scripts (PDF)",
+        "60-Day High Definition Recordings Archive Access",
+        "Daily Breakout Rooms & Peer Speaking Practice",
+        "Direct Mentor Feedback & Natural Accent Coaching"
       ],
       duration: "2.5 Months (50 Sessions)",
       learningFormat: "Live Batches + Daily Speaking Drills",
@@ -1281,6 +1462,13 @@ let cmsContent: any = {
         "Memory retention techniques (no rote memorisation)",
         "Applying new vocabulary naturally in impromptu dialogues"
       ],
+      facilities: [
+        "30 Interactive Vocabulary Workshops",
+        "1,000+ Active Conversational Words & Idioms PDF",
+        "60-Day Lecture Recordings Access",
+        "Active Impromptu Dialogue Drills",
+        "Weekly Vocabulary Retention Quizzes & Notes"
+      ],
       duration: "1.5 Months (30 Sessions)",
       learningFormat: "Interactive Vocabulary Workshops",
       fee: 999,
@@ -1296,6 +1484,13 @@ let cmsContent: any = {
         "Handling casual small talk, phone calls & discussions",
         "Polite interruptions, expressing opinions & agreement",
         "Confidence building with peer interaction"
+      ],
+      facilities: [
+        "40 100% Practical Speaking & Roleplay Sessions",
+        "Everyday Scenario Dialogue Scripts (PDF)",
+        "60-Day Class Recordings Access",
+        "One-on-One Simulated Roleplay Rounds",
+        "Live Accent & Fluency Coaching"
       ],
       duration: "2 Months (40 Sessions)",
       learningFormat: "100% Speaking & Dialogue Practice",
@@ -1313,6 +1508,13 @@ let cmsContent: any = {
         "Professional email, etiquette & formal discussion",
         "Clear, articulate presentation skills"
       ],
+      facilities: [
+        "35 Masterclass Sessions + Mock Interviews",
+        "Self-Pitch & Corporate Presentation Handbook (PDF)",
+        "60-Day Class Recordings Access",
+        "Live Job Interview Simulations & Stage Fear Removal",
+        "1-on-1 Feedback from Senior Mentors"
+      ],
       duration: "2 Months (35 Sessions)",
       learningFormat: "Masterclass Format + Mock Interviews",
       fee: 1699,
@@ -1329,6 +1531,13 @@ let cmsContent: any = {
         "Advanced debate, spontaneous argument articulation",
         "Refined accent clarity, pacing, stress & intonation",
         "Complex idea synthesis and persuasive speech"
+      ],
+      facilities: [
+        "60 Executive Live Sessions",
+        "Advanced Rhetoric, Tone & Debate Guides (PDF)",
+        "60-Day Class Recordings Access",
+        "Spontaneous Debate Rounds & Idea Synthesis",
+        "Executive Presentation & Leadership Communication Coaching"
       ],
       duration: "3 Months (60 Sessions)",
       learningFormat: "Executive Live Batch",
@@ -1365,6 +1574,22 @@ let cmsContent: any = {
   ]
 };
 
+// Helper: Cookie parser
+function parseCookies(req: express.Request): Record<string, string> {
+  const list: Record<string, string> = {};
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return list;
+  cookieHeader.split(";").forEach((cookie) => {
+    const parts = cookie.split("=");
+    const name = parts[0]?.trim();
+    if (!name) return;
+    const val = parts.slice(1).join("=").trim();
+    if (!val) return;
+    list[name] = decodeURIComponent(val);
+  });
+  return list;
+}
+
 // Helper: Token generator & validation
 function generateAuthToken(user: DBUser): string {
   const payload = {
@@ -1374,16 +1599,37 @@ function generateAuthToken(user: DBUser): string {
     name: user.name,
     batchIds: user.batchIds,
     admissionId: user.admissionId,
-    issuedAt: Date.now()
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours validity
   };
   const str = Buffer.from(JSON.stringify(payload)).toString("base64");
   const signature = crypto.createHmac("sha256", JWT_SECRET).update(str).digest("hex");
   return `${str}.${signature}`;
 }
 
-function verifyAuthToken(authHeader?: string): { userId: string; role: string; email: string; name: string; batchIds: string[]; admissionId?: string } | null {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-  const token = authHeader.substring(7).trim();
+function verifyAuthToken(reqOrHeader?: express.Request | string): { userId: string; role: string; email: string; name: string; batchIds: string[]; admissionId?: string } | null {
+  if (!reqOrHeader) return null;
+  let token: string | undefined;
+
+  if (typeof reqOrHeader === "string") {
+    if (reqOrHeader.startsWith("Bearer ")) {
+      token = reqOrHeader.substring(7).trim();
+    } else {
+      token = reqOrHeader.trim();
+    }
+  } else if (typeof reqOrHeader === "object") {
+    const authHeader = reqOrHeader.headers?.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7).trim();
+    }
+    if (!token) {
+      const cookies = parseCookies(reqOrHeader);
+      token = cookies.admin_session_token || cookies.wits_auth_token;
+    }
+  }
+
+  if (!token) return null;
+
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   const [dataB64, sig] = parts;
@@ -1392,10 +1638,26 @@ function verifyAuthToken(authHeader?: string): { userId: string; role: string; e
 
   try {
     const payload = JSON.parse(Buffer.from(dataB64, "base64").toString("utf-8"));
+    if (payload.expiresAt && Date.now() > payload.expiresAt) {
+      return null; // Expired token
+    }
     return payload;
   } catch (e) {
     return null;
   }
+}
+
+// Middleware: Require Admin Authentication
+function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const auth = verifyAuthToken(req);
+  if (!auth) {
+    return res.status(401).json({ error: "Unauthorized: Admin authentication required." });
+  }
+  if (auth.role !== "admin") {
+    return res.status(403).json({ error: "Access Denied: Administrator privileges required." });
+  }
+  (req as any).auth = auth;
+  next();
 }
 
 // Generate secure signed temporary video playback URL token (expires in 1 hour)
@@ -1608,6 +1870,12 @@ function loadAllPersistedData(): void {
       try {
         const data = JSON.parse(fs.readFileSync(MATERIALS_STORAGE_FILE, "utf-8"));
         if (Array.isArray(data) && data.length > 0) {
+          const existingIds = new Set(data.map((m: any) => m.id));
+          for (const m of studyMaterials) {
+            if (!existingIds.has(m.id)) {
+              data.push(m);
+            }
+          }
           for (const m of data) {
             if (!m.downloadUrl || m.downloadUrl === "#") {
               m.downloadUrl = `/api/files/download/${m.id}`;
@@ -1617,6 +1885,7 @@ function loadAllPersistedData(): void {
           studyMaterials.push(...data);
           materialsLoaded = true;
           console.log(`[Persistence] Loaded ${studyMaterials.length} study materials.`);
+          savePersistedMaterials();
         }
       } catch (e) {
         console.warn("[Persistence] Could not parse materials.json:", e);
@@ -1746,19 +2015,72 @@ function savePersistedMaterials(): void {
 loadAllPersistedData();
 
 // =========================================================================
-// WHATSAPP CLOUD API AUTOMATION (Meta Graph API)
+// WHATSAPP CLOUD API AUTOMATION (Meta Graph API) — PRODUCTION SECURE ENGINE
 // =========================================================================
 async function sendWhatsAppEnrollmentMessage(data: {
   studentName: string;
   courseName: string;
   batchName: string;
-  startDate: string;
-  classTiming: string;
+  courseId?: string;
+  batchId?: string;
+  startDate?: string;
+  classTiming?: string;
   googleMeetLink?: string;
   amount: number | string;
   admissionId: string;
   recipientPhone: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  facilities?: string[];
+  forceResend?: boolean;
+}): Promise<{ success: boolean; messageId?: string; error?: string; skipped?: boolean }> {
+  const studentReg = registrations.find(r => r.admissionId === data.admissionId || r.id === data.admissionId);
+
+  // Idempotency check: Do NOT send duplicate message if already sent
+  if (studentReg && studentReg.whatsappDeliveryStatus === "sent" && !data.forceResend) {
+    console.log(`[WhatsApp] Idempotency: Enrollment ${data.admissionId} already confirmed via WhatsApp (ID: ${studentReg.whatsappMessageId}). Skipping duplicate dispatch.`);
+    return { success: true, skipped: true, messageId: studentReg.whatsappMessageId };
+  }
+
+  // 1. Resolve Course Facilities dynamically
+  const foundCourse = (cmsContent.courses || []).find((c: any) => c.id === data.courseId || c.name === data.courseName);
+  const rawFacilities: string[] = (data.facilities && data.facilities.length > 0)
+    ? data.facilities
+    : (foundCourse?.facilities && foundCourse.facilities.length > 0
+      ? foundCourse.facilities
+      : (foundCourse?.whatYouWillLearn && foundCourse.whatYouWillLearn.length > 0
+        ? foundCourse.whatYouWillLearn
+        : [
+            "Live Interactive Speaking Classes with Zia Sir",
+            "Protected Study Material & Practice Worksheets (PDF)",
+            "60-Day Full Lecture Recordings Access",
+            "Daily Speaking Drills & Breakout Rooms",
+            "1-on-1 Personalized Doubt Support"
+          ]));
+
+  const facilitiesText = rawFacilities.map(f => `• ${f}`).join("\n");
+
+  // 2. Resolve Batch Details dynamically (Class Time, Start Date) & Use Fixed Permanent Google Meet Link
+  const foundBatch = batches.find(b => b.id === data.batchId || b.name === data.batchName);
+  const meetLink = WITS_LINGO_CONFIG.GOOGLE_MEET_LINK;
+  const startDate = data.startDate || foundBatch?.startDate || WITS_LINGO_CONFIG.FALLBACK_START_DATE || "Upcoming Batch";
+  const classTime = data.classTiming || foundBatch?.classTime || foundBatch?.scheduleTime || WITS_LINGO_CONFIG.DEFAULT_SCHEDULE_TIME || "Daily Live Session";
+
+  // 3. Clean recipient to E.164 without plus or non-digits (e.g. 919876543210)
+  let cleanRecipient = (data.recipientPhone || "").replace(/\D/g, "");
+  if (cleanRecipient.length === 10) {
+    cleanRecipient = `91${cleanRecipient}`;
+  }
+
+  if (!cleanRecipient || cleanRecipient.length < 10) {
+    const errMsg = "Invalid recipient phone number for WhatsApp Cloud API";
+    if (studentReg) {
+      studentReg.whatsappDeliveryStatus = "failed";
+      studentReg.whatsappError = errMsg;
+      saveRegistrations();
+    }
+    return { success: false, error: errMsg };
+  }
+
+  // 4. Server-Side Environment Secrets (Meta Cloud API)
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
   const version = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
@@ -1766,19 +2088,15 @@ async function sendWhatsAppEnrollmentMessage(data: {
   const templateLang = process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "en";
 
   if (!phoneId || !token) {
-    console.log("[WhatsApp] Meta Cloud API credentials not configured in environment. Skipping automated API call.");
+    console.log("[WhatsApp] Meta Cloud API credentials not configured in server environment. Marked as pending.");
+    if (studentReg) {
+      studentReg.whatsappDeliveryStatus = "pending";
+      studentReg.whatsappError = "Meta Cloud API credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) not configured";
+      studentReg.facilities = rawFacilities;
+      saveRegistrations();
+    }
     return { success: false, error: "WhatsApp credentials not configured" };
   }
-
-  // Format recipient to E.164 without plus or non-digits (e.g. 919876543210)
-  let cleanRecipient = data.recipientPhone.replace(/\D/g, "");
-  if (cleanRecipient.length === 10) {
-    cleanRecipient = `91${cleanRecipient}`;
-  }
-
-  const meetLink = data.googleMeetLink && data.googleMeetLink.trim().length > 0 
-    ? data.googleMeetLink.trim() 
-    : "Google Meet link will be shared in your batch portal before class";
 
   const payload = {
     messaging_product: "whatsapp",
@@ -1793,12 +2111,12 @@ async function sendWhatsAppEnrollmentMessage(data: {
           type: "body",
           parameters: [
             { type: "text", text: data.studentName || "Student" },
-            { type: "text", text: data.courseName || "English Course" },
-            { type: "text", text: data.batchName || "Active Batch" },
-            { type: "text", text: data.startDate || "Upcoming" },
-            { type: "text", text: data.classTiming || "Daily Live Session" },
+            { type: "text", text: data.courseName || foundCourse?.name || "English Course" },
+            { type: "text", text: data.batchName || foundBatch?.name || "Active Batch" },
+            { type: "text", text: startDate },
+            { type: "text", text: classTime },
+            { type: "text", text: facilitiesText },
             { type: "text", text: meetLink },
-            { type: "text", text: `₹${data.amount}` },
             { type: "text", text: data.admissionId }
           ]
         }
@@ -1818,17 +2136,40 @@ async function sendWhatsAppEnrollmentMessage(data: {
 
     const resData = (await res.json()) as any;
     if (!res.ok) {
-      const errDetail = resData?.error?.message || "WhatsApp dispatch rejected by Meta";
-      console.warn(`[WhatsApp] Delivery failure: ${errDetail}`);
+      const errDetail = resData?.error?.message || "WhatsApp dispatch rejected by Meta Cloud API";
+      console.warn(`[WhatsApp] Delivery failure to ${cleanRecipient}: ${errDetail}`);
+      if (studentReg) {
+        studentReg.whatsappDeliveryStatus = "failed";
+        studentReg.whatsappError = errDetail;
+        studentReg.facilities = rawFacilities;
+        saveRegistrations();
+      }
       return { success: false, error: errDetail };
     }
 
-    const msgId = resData?.messages?.[0]?.id;
+    const msgId = resData?.messages?.[0]?.id || `wa_msg_${Date.now()}`;
     console.log(`[WhatsApp] Automated enrollment notification sent to ${cleanRecipient} (Message ID: ${msgId})`);
+
+    if (studentReg) {
+      studentReg.whatsappDeliveryStatus = "sent";
+      studentReg.whatsappMessageId = msgId;
+      studentReg.whatsappSentAt = new Date().toISOString();
+      studentReg.whatsappError = undefined;
+      studentReg.facilities = rawFacilities;
+      saveRegistrations();
+    }
+
     return { success: true, messageId: msgId };
   } catch (err: any) {
-    console.warn(`[WhatsApp] Network exception during dispatch: ${err?.message || err}`);
-    return { success: false, error: err?.message || "Network exception" };
+    const errMsg = err?.message || "Network exception during WhatsApp dispatch";
+    console.warn(`[WhatsApp] Network exception: ${errMsg}`);
+    if (studentReg) {
+      studentReg.whatsappDeliveryStatus = "failed";
+      studentReg.whatsappError = errMsg;
+      studentReg.facilities = rawFacilities;
+      saveRegistrations();
+    }
+    return { success: false, error: errMsg };
   }
 }
 
@@ -1878,71 +2219,130 @@ async function startServer() {
     res.json({ status: "ok", app: "Wits Lingo Academy Server", timestamp: new Date().toISOString() });
   });
 
-  // 1. AUTH: Login (Supports Email, Admission ID / Roll No, and Admin Key)
-  app.post("/api/auth/login", (req, res) => {
+  // 1. AUTH: Login (Supports Username, Email, Admission ID, and server-side ADMIN_USERNAME/ADMIN_PASSWORD)
+  app.post(["/api/auth/login", "/api/admin/auth/login", "/api/admin/login"], (req, res) => {
     const { email, username, password, adminPasskey } = req.body;
+    const loginIdentifier = (username || email || "").trim();
+    const inputPass = (password || adminPasskey || "").trim();
 
-    // Direct Admin unlock support (simple security for opening admin)
-    if (adminPasskey || (!email && !username && password)) {
-      const pass = adminPasskey || password;
-      const adminUser = users.find(u => u.role === "admin");
-      if (adminUser && (adminUser.passwordHash === pass || pass === "admin123")) {
-        const token = generateAuthToken(adminUser);
+    if (!loginIdentifier || !inputPass) {
+      return res.status(400).json({ error: "Please provide your Username/Email and Password." });
+    }
+
+    // 1. Check against server-side ADMIN_USERNAME and ADMIN_PASSWORD
+    const isEnvAdminMatch = 
+      loginIdentifier.toLowerCase() === ADMIN_USERNAME.toLowerCase() ||
+      loginIdentifier.toLowerCase() === "admin@witslingo.com";
+
+    if (isEnvAdminMatch && verifyPassword(inputPass, ADMIN_PASSWORD)) {
+      const primaryAdmin: DBUser = {
+        id: "usr-admin-primary",
+        name: "WITS LINGO Administrator",
+        email: "admin@witslingo.com",
+        username: ADMIN_USERNAME,
+        passwordHash: ADMIN_PASSWORD,
+        role: "admin",
+        phone: "7310952271",
+        batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
+        registrationDate: "2026-01-01"
+      };
+
+      const token = generateAuthToken(primaryAdmin);
+      
+      // Set secure HttpOnly session cookie
+      res.setHeader(
+        "Set-Cookie",
+        `admin_session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+      );
+
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: primaryAdmin.id,
+          name: primaryAdmin.name,
+          email: primaryAdmin.email,
+          role: primaryAdmin.role,
+          phone: primaryAdmin.phone,
+          batchIds: primaryAdmin.batchIds,
+          registrationDate: primaryAdmin.registrationDate
+        }
+      });
+    }
+
+    // 2. Check in database users (for other admin accounts or students)
+    const user = users.find(u => 
+      u.email.toLowerCase() === loginIdentifier.toLowerCase() || 
+      (u.admissionId && u.admissionId.toLowerCase() === loginIdentifier.toLowerCase()) ||
+      (u.username && u.username.toLowerCase() === loginIdentifier.toLowerCase())
+    );
+
+    if (user) {
+      const passwordMatches = 
+        verifyPassword(inputPass, user.passwordHash) ||
+        (user.role === 'admin' && (verifyPassword(inputPass, ADMIN_PASSWORD) || inputPass === 'admin123'));
+
+      if (passwordMatches) {
+        const token = generateAuthToken(user);
+
+        if (user.role === 'admin') {
+          res.setHeader(
+            "Set-Cookie",
+            `admin_session_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+          );
+        }
+
         return res.json({
+          success: true,
           token,
           user: {
-            id: adminUser.id,
-            name: adminUser.name,
-            email: adminUser.email,
-            role: adminUser.role,
-            phone: adminUser.phone,
-            batchIds: adminUser.batchIds,
-            admissionId: adminUser.admissionId,
-            registrationDate: adminUser.registrationDate
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            phone: user.phone,
+            batchIds: user.batchIds,
+            admissionId: user.admissionId,
+            registrationDate: user.registrationDate
           }
         });
       }
-      return res.status(401).json({ error: "Invalid admin security key / password." });
     }
 
-    const loginIdentifier = (email || username || "").trim().toLowerCase();
-    if (!loginIdentifier || !password) {
-      return res.status(400).json({ error: "Please provide your Email or Admission ID, and Password." });
-    }
-
-    const user = users.find(u => 
-      u.email.toLowerCase() === loginIdentifier || 
-      (u.admissionId && u.admissionId.toLowerCase() === loginIdentifier)
-    );
-
-    if (!user || (user.passwordHash !== password && !(user.role === 'admin' && password === 'admin123'))) {
-      return res.status(401).json({ error: "Invalid credentials. Please verify your Email/Admission ID and Password." });
-    }
-
-    const token = generateAuthToken(user);
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        batchIds: user.batchIds,
-        admissionId: user.admissionId,
-        registrationDate: user.registrationDate
-      }
-    });
+    return res.status(401).json({ error: "Invalid username or password" });
   });
 
-  // 2. AUTH: Get Current User
-  app.get("/api/auth/me", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
+  // 1B. AUTH: Logout (Clears server-side authentication cookie)
+  app.post(["/api/auth/logout", "/api/admin/auth/logout", "/api/admin/logout"], (req, res) => {
+    res.setHeader(
+      "Set-Cookie",
+      "admin_session_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    );
+    res.json({ success: true, message: "Logged out successfully" });
+  });
+
+  // 2. AUTH: Get Current User & Validate Session
+  app.get(["/api/auth/me", "/api/admin/auth/me"], (req, res) => {
+    const auth = verifyAuthToken(req);
     if (!auth) {
       return res.status(401).json({ error: "Unauthorized. Please log in." });
     }
 
-    const user = users.find(u => u.id === auth.userId);
+    let user = users.find(u => u.id === auth.userId);
+    if (!user && auth.role === "admin") {
+      user = {
+        id: auth.userId,
+        name: auth.name || "WITS LINGO Administrator",
+        email: auth.email || "admin@witslingo.com",
+        username: ADMIN_USERNAME,
+        passwordHash: ADMIN_PASSWORD,
+        role: "admin",
+        phone: "7310952271",
+        batchIds: ["batch-spoken-oct-2026", "batch-spoken-nov-2026", "batch-foundation-oct-2026", "batch-vocab-sept-2026"],
+        registrationDate: "2026-01-01"
+      };
+    }
+
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
@@ -2605,24 +3005,33 @@ async function startServer() {
       saveBatches();
       savePayments();
 
-      // Async Non-blocking WhatsApp Confirmation
+      // Async Non-blocking WhatsApp Confirmation (Meta Cloud API)
       sendWhatsAppEnrollmentMessage({
         studentName: studentReg.name,
         courseName: studentReg.courseName,
         batchName: studentReg.batchName,
+        courseId: studentReg.courseId,
+        batchId: studentReg.batchId,
         startDate: batch.startDate || "Upcoming",
-        classTiming: batch.scheduleTime || "Daily Live Class",
-        googleMeetLink: batch.googleMeetLink,
+        classTiming: batch.classTime || batch.scheduleTime || "Daily Live Class",
+        googleMeetLink: batch.googleMeetLink || batch.meetLink,
         amount: studentReg.feeAmount,
         admissionId: studentReg.admissionId,
-        recipientPhone: studentReg.whatsapp || studentReg.phone
+        recipientPhone: studentReg.whatsapp || studentReg.phone,
+        facilities: course.facilities
       }).then(waRes => {
-        studentReg.whatsappDeliveryStatus = waRes.success ? "sent" : "failed";
-        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        if (waRes.success) {
+          studentReg.whatsappDeliveryStatus = "sent";
+          if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        } else {
+          studentReg.whatsappDeliveryStatus = "failed";
+          if (waRes.error) studentReg.whatsappError = waRes.error;
+        }
         saveRegistrations();
       }).catch(err => {
         console.warn("[WhatsApp] Async dispatch error:", err);
         studentReg.whatsappDeliveryStatus = "failed";
+        studentReg.whatsappError = err?.message || "Dispatch error";
         saveRegistrations();
       });
 
@@ -2640,7 +3049,7 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 • *Assigned Batch:* ${batch.name} (${batch.batchCode})
 • *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
 • *Batch Start Date:* ${batch.startDate || '1st of the month'}
-• *Google Meet Link:* ${batch.googleMeetLink || 'Will be shared in student portal'}
+• *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
 • *Fee Paid:* ₹${course.fee} (Verified via Razorpay)
 • *Payment Ref:* ${razorpayPaymentId}
 
@@ -2650,14 +3059,14 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 • *Password:* ${user.passwordHash}
 
 📱 *BATCH WHATSAPP GROUP & SUPPORT*
-📞 *+91 8791287575* / *+91 7310952271*
+📞 *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
 
 Welcome to WITS LINGO!
 www.witslingo.com`;
 
       const encodedMsg = encodeURIComponent(confirmationText);
       const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedMsg}`;
-      const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=918791287575&text=${encodedMsg}`;
+      const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
 
       studentReg.whatsappConfirmationMessage = confirmationText;
       studentReg.whatsappStudentUrl = whatsappStudentUrl;
@@ -2767,6 +3176,11 @@ www.witslingo.com`;
   });
 
   // =========================================================================
+  // ADMIN AUTHENTICATION MIDDLEWARE FOR ALL /api/admin/* ROUTES
+  // =========================================================================
+  app.use("/api/admin", requireAdminAuth);
+
+  // =========================================================================
   // HERO VIDEO BACKBLAZE B2 MANAGEMENT & STREAMING
   // =========================================================================
 
@@ -2870,6 +3284,125 @@ www.witslingo.com`;
       res.writeHead(200, head);
       fs.createReadStream(diskPath).pipe(res);
     }
+  });
+
+  // =========================================================================
+  // CENTRAL WEBSITE LOGO BACKBLAZE B2 MANAGEMENT
+  // =========================================================================
+
+  app.post("/api/admin/logo/upload", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    try {
+      const { dataBase64, filename, mimeType } = req.body;
+      if (!dataBase64) {
+        return res.status(400).json({ error: "Logo image data is required." });
+      }
+
+      const validMimeTypes = [
+        "image/png", "image/jpeg", "image/jpg", "image/webp", "image/svg+xml", "image/gif", "image/avif"
+      ];
+
+      const cleanMime = (mimeType || "image/png").toLowerCase();
+      if (!validMimeTypes.includes(cleanMime) && !cleanMime.startsWith("image/")) {
+        return res.status(400).json({ error: "Invalid image format. Supported formats: PNG, JPG, JPEG, WEBP, SVG." });
+      }
+
+      const rawBase64 = dataBase64.includes(",") ? dataBase64.split(",")[1] : dataBase64;
+      const buffer = Buffer.from(rawBase64, "base64");
+      
+      if (buffer.length === 0) {
+        return res.status(400).json({ error: "Uploaded file is empty." });
+      }
+      if (buffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ error: "Logo file size exceeds 8MB limit." });
+      }
+
+      const ext = path.extname(filename || "logo.png") || (cleanMime.includes("svg") ? ".svg" : ".png");
+      const safeFilename = `wits-lingo-logo-${Date.now()}${ext}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+      // Save to disk for durability & local fallback
+      const diskPath = path.join(uploadsDir, safeFilename);
+      try {
+        fs.writeFileSync(diskPath, buffer);
+      } catch (diskErr) {
+        console.warn("[Logo] Could not save logo to disk:", diskErr);
+      }
+
+      let finalLogoUrl = `/api/files/logo/${encodeURIComponent(safeFilename)}`;
+      let uploadedToB2 = false;
+      let b2FileId: string | undefined;
+      let b2FileName: string | undefined;
+
+      // Upload to Backblaze B2 if configured
+      try {
+        const objectKey = `branding/${safeFilename}`;
+        const b2Res = await uploadBufferToB2(objectKey, buffer, cleanMime);
+        if (b2Res.success && b2Res.url) {
+          finalLogoUrl = b2Res.url;
+          uploadedToB2 = true;
+          b2FileId = b2Res.fileId;
+          b2FileName = b2Res.fileName || objectKey;
+        }
+      } catch (b2Err: any) {
+        console.warn("[Logo] Backblaze B2 upload error, falling back to local stream:", b2Err?.message);
+      }
+
+      const logoVersion = Date.now();
+      if (!cmsContent.settings) cmsContent.settings = {};
+      cmsContent.settings.logoUrl = finalLogoUrl;
+      cmsContent.settings.logoVersion = logoVersion;
+      cmsContent.settings.b2LogoId = b2FileId;
+      cmsContent.settings.b2LogoName = b2FileName;
+      saveCmsContent();
+
+      res.json({
+        success: true,
+        logoUrl: finalLogoUrl,
+        logoVersion,
+        uploadedToB2,
+        message: "Main website logo updated successfully and published across the website."
+      });
+    } catch (err: any) {
+      console.error("[Logo] Error uploading logo:", err);
+      res.status(500).json({ error: err.message || "Failed to process logo upload." });
+    }
+  });
+
+  app.post("/api/admin/logo/reset", (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Admin authorization required." });
+    }
+
+    if (!cmsContent.settings) cmsContent.settings = {};
+    cmsContent.settings.logoUrl = "/logo.svg";
+    cmsContent.settings.logoVersion = Date.now();
+    cmsContent.settings.b2LogoId = undefined;
+    cmsContent.settings.b2LogoName = undefined;
+    saveCmsContent();
+
+    res.json({
+      success: true,
+      logoUrl: "/logo.svg",
+      logoVersion: cmsContent.settings.logoVersion,
+      message: "Main website logo reset to default SVG logo."
+    });
+  });
+
+  app.get("/api/files/logo/:filename?", (req, res) => {
+    const requestedFile = req.params.filename ? path.basename(req.params.filename) : "";
+    if (requestedFile) {
+      const diskPath = path.join(uploadsDir, requestedFile);
+      if (fs.existsSync(diskPath)) {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.sendFile(diskPath);
+      }
+    }
+    return res.redirect("/logo.svg");
   });
 
   // =========================================================================
@@ -3400,7 +3933,7 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 • *Assigned Batch:* ${batch.name} (${batch.batchCode})
 • *Batch Timings:* ${batch.scheduleTime || 'Daily 1-Hour Live Class'}
 • *Batch Start Date:* ${batch.startDate || '1st of the month'}
-• *Google Meet Link:* ${batch.googleMeetLink || 'Will be shared in student portal'}
+• *Google Meet Link:* ${WITS_LINGO_CONFIG.GOOGLE_MEET_LINK}
 • *Fee Status:* ${paymentStatus} (${studentReg.paymentAmountFormatted || '₹' + course.fee})
 • *Payment Ref:* ${studentReg.paymentTxnId}
 
@@ -3411,7 +3944,7 @@ Congratulations! Your seat has been successfully confirmed at *WITS LINGO — A 
 
 📱 *BATCH WHATSAPP GROUP & SUPPORT*
 Save our official mentor helpline on WhatsApp:
-📞 *+91 8791287575* / *+91 7310952271*
+📞 *${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}*
 Our academic counsellor will add you to your exclusive batch WhatsApp group.
 
 Welcome to the journey of speaking English naturally!
@@ -3421,9 +3954,9 @@ www.witslingo.com`;
 
     const encodedWhatsappMsg = encodeURIComponent(whatsappConfirmationText);
     const whatsappStudentUrl = `https://api.whatsapp.com/send?phone=${whatsappCleanRecipient}&text=${encodedWhatsappMsg}`;
-    const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=918791287575&text=${encodedWhatsappMsg}`;
+    const whatsappAdminUrl = `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedWhatsappMsg}`;
     const waMeStudentUrl = `https://wa.me/${whatsappCleanRecipient}?text=${encodedWhatsappMsg}`;
-    const waMeAdminUrl = `https://wa.me/918791287575?text=${encodedWhatsappMsg}`;
+    const waMeAdminUrl = `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodedWhatsappMsg}`;
 
     studentReg.whatsappConfirmationMessage = whatsappConfirmationText;
     studentReg.whatsappStudentUrl = whatsappStudentUrl;
@@ -3434,24 +3967,36 @@ www.witslingo.com`;
     saveUsers();
     saveBatches();
 
-    // Async WhatsApp dispatch
+    // Async WhatsApp dispatch (Meta Cloud API)
     if (paymentStatus === "Paid") {
+      const courseObj = (cmsContent.courses || []).find((c: any) => c.id === studentReg.courseId || c.name === studentReg.courseName);
       sendWhatsAppEnrollmentMessage({
         studentName: studentReg.name,
         courseName: studentReg.courseName,
         batchName: studentReg.batchName,
+        courseId: studentReg.courseId,
+        batchId: studentReg.batchId,
         startDate: batch.startDate || "Upcoming",
-        classTiming: batch.scheduleTime || "Daily Live Session",
-        googleMeetLink: batch.googleMeetLink,
+        classTiming: batch.classTime || batch.scheduleTime || "Daily Live Session",
+        googleMeetLink: batch.googleMeetLink || batch.meetLink,
         amount: studentReg.feeAmount,
         admissionId: studentReg.admissionId,
-        recipientPhone: studentReg.whatsapp || studentReg.phone
+        recipientPhone: studentReg.whatsapp || studentReg.phone,
+        facilities: courseObj?.facilities
       }).then(waRes => {
-        studentReg.whatsappDeliveryStatus = waRes.success ? "sent" : "failed";
-        if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        if (waRes.success) {
+          studentReg.whatsappDeliveryStatus = "sent";
+          if (waRes.messageId) studentReg.whatsappMessageId = waRes.messageId;
+        } else {
+          studentReg.whatsappDeliveryStatus = "failed";
+          if (waRes.error) studentReg.whatsappError = waRes.error;
+        }
         saveRegistrations();
       }).catch(err => {
         console.warn("[WhatsApp] Async dispatch exception:", err);
+        studentReg.whatsappDeliveryStatus = "failed";
+        studentReg.whatsappError = err?.message || "Dispatch error";
+        saveRegistrations();
       });
     }
 
@@ -3577,6 +4122,92 @@ www.witslingo.com`
     }
 
     res.json({ students: list, totalCount: list.length });
+  });
+
+  // 15b. ADMIN: Resend WhatsApp Enrollment Confirmation (Idempotent / Forced Retry)
+  app.post("/api/admin/students/:id/resend-whatsapp", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+    }
+
+    const { id } = req.params;
+    const reg = registrations.find(r => r.id === id || r.admissionId === id);
+    if (!reg) {
+      return res.status(404).json({ error: "Student enrollment record not found." });
+    }
+
+    const batch = batches.find(b => b.id === reg.batchId);
+    const course = (cmsContent.courses || []).find((c: any) => c.id === reg.courseId || c.name === reg.courseName);
+
+    const waRes = await sendWhatsAppEnrollmentMessage({
+      studentName: reg.name,
+      courseName: reg.courseName,
+      batchName: reg.batchName,
+      courseId: reg.courseId,
+      batchId: reg.batchId,
+      startDate: batch?.startDate || "Upcoming",
+      classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
+      googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
+      amount: reg.feeAmount,
+      admissionId: reg.admissionId,
+      recipientPhone: reg.whatsapp || reg.phone,
+      facilities: course?.facilities,
+      forceResend: true
+    });
+
+    saveRegistrations();
+
+    res.json({
+      success: waRes.success,
+      whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
+      messageId: reg.whatsappMessageId,
+      error: waRes.error,
+      skipped: waRes.skipped
+    });
+  });
+
+  // Alias for /api/admin/registrations/:id/resend-whatsapp
+  app.post("/api/admin/registrations/:id/resend-whatsapp", async (req, res) => {
+    const auth = verifyAuthToken(req.headers.authorization);
+    if (!auth || auth.role !== "admin") {
+      return res.status(403).json({ error: "Access Denied: Admin authorization required." });
+    }
+
+    const { id } = req.params;
+    const reg = registrations.find(r => r.id === id || r.admissionId === id);
+    if (!reg) {
+      return res.status(404).json({ error: "Student enrollment record not found." });
+    }
+
+    const batch = batches.find(b => b.id === reg.batchId);
+    const course = (cmsContent.courses || []).find((c: any) => c.id === reg.courseId || c.name === reg.courseName);
+
+    const waRes = await sendWhatsAppEnrollmentMessage({
+      studentName: reg.name,
+      courseName: reg.courseName,
+      batchName: reg.batchName,
+      courseId: reg.courseId,
+      batchId: reg.batchId,
+      startDate: batch?.startDate || "Upcoming",
+      classTiming: batch?.classTime || batch?.scheduleTime || "Daily Live Session",
+      googleMeetLink: batch?.googleMeetLink || batch?.meetLink,
+      amount: reg.feeAmount,
+      admissionId: reg.admissionId,
+      recipientPhone: reg.whatsapp || reg.phone,
+      facilities: course?.facilities,
+      forceResend: true
+    });
+
+    saveRegistrations();
+
+    res.json({
+      success: waRes.success,
+      whatsappDeliveryStatus: reg.whatsappDeliveryStatus,
+      messageId: reg.whatsappMessageId,
+      error: waRes.error,
+      skipped: waRes.skipped
+    });
   });
 
   // 16. ADMIN: Batch Management (Create Batch)
@@ -3749,67 +4380,167 @@ www.witslingo.com`
     res.json({ success: true, recording: newRec });
   });
 
-  // 20a. PUBLIC: Get All Live Website Study Materials & PDF Resources
-  app.get("/api/materials", (req, res) => {
-    const publicMaterials = studyMaterials.map(m => ({
-      ...m,
-      downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
-    }));
-    res.json({ materials: publicMaterials });
+  // Helper: Extract YouTube Video ID
+  function extractYouTubeVideoId(url: string): string | null {
+    if (!url || typeof url !== "string") return null;
+    const cleanUrl = url.trim();
+    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i;
+    const match = cleanUrl.match(regExp);
+    return match && match[1] ? match[1] : null;
+  }
+
+  // 20-yt. ADMIN & PUBLIC: Fetch YouTube Video Metadata via standard oEmbed
+  const handleYouTubeMetadataFetch = async (req: express.Request, res: express.Response) => {
+    const rawUrl = (req.body?.url || req.query?.url || "") as string;
+    if (!rawUrl || typeof rawUrl !== "string") {
+      return res.status(400).json({ error: "Please provide a valid YouTube URL." });
+    }
+
+    const videoId = extractYouTubeVideoId(rawUrl);
+    if (!videoId) {
+      return res.status(400).json({ error: "Could not extract a valid YouTube video ID from URL." });
+    }
+
+    const defaultThumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    const maxThumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
+      const response = await fetch(oembedUrl);
+      if (response.ok) {
+        const data = (await response.json()) as any;
+        return res.json({
+          success: true,
+          videoId,
+          title: data.title || "",
+          authorName: data.author_name || "Wits Lingo",
+          authorUrl: data.author_url || "https://youtube.com/@witslingoeng",
+          thumbnailUrl: data.thumbnail_url || defaultThumbnail,
+          defaultThumbnailUrl: defaultThumbnail,
+          maxThumbnailUrl: maxThumbnail
+        });
+      }
+    } catch (err: any) {
+      console.warn("YouTube oEmbed fetch exception:", err?.message);
+    }
+
+    // Safe fallback when oEmbed metadata is not directly available
+    return res.json({
+      success: true,
+      videoId,
+      title: "",
+      authorName: "Wits Lingo",
+      thumbnailUrl: defaultThumbnail,
+      defaultThumbnailUrl: defaultThumbnail,
+      maxThumbnailUrl: maxThumbnail
+    });
+  };
+
+  app.post("/api/admin/youtube-metadata", handleYouTubeMetadataFetch);
+  app.get("/api/admin/youtube-metadata", handleYouTubeMetadataFetch);
+  app.post("/api/youtube-metadata", handleYouTubeMetadataFetch);
+  app.get("/api/youtube-metadata", handleYouTubeMetadataFetch);
+
+  // Helper: Sort learning materials by displayOrder ascending, then uploaded date descending
+  function sortLearningMaterials(items: DBStudyMaterial[]): DBStudyMaterial[] {
+    return [...items].sort((a, b) => {
+      const orderA = a.displayOrder !== undefined ? a.displayOrder : 9999;
+      const orderB = b.displayOrder !== undefined ? b.displayOrder : 9999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (b.id || "").localeCompare(a.id || "");
+    });
+  }
+
+  // 20a. PUBLIC: Get All Live Website Study Materials & PDF / YouTube Resources
+  app.get(["/api/materials", "/api/learning-resources"], (req, res) => {
+    const publicMaterials = sortLearningMaterials(studyMaterials)
+      .filter(m => m.isVisibleOnWebsite !== false && m.isPublished !== false)
+      .map(m => ({
+        ...m,
+        downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
+      }));
+    res.json({ materials: publicMaterials, resources: publicMaterials });
   });
 
-  // 20b. ADMIN: Get All Study Materials
-  app.get("/api/admin/materials", (req, res) => {
+  // 20b. ADMIN: Get All Study Materials & Learning Resources
+  app.get(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
-    const allMaterials = studyMaterials.map(m => ({
+    const allMaterials = sortLearningMaterials(studyMaterials).map(m => ({
       ...m,
       downloadUrl: (!m.downloadUrl || m.downloadUrl === "#") ? `/api/files/download/${m.id}` : m.downloadUrl
     }));
-    res.json({ materials: allMaterials });
+    res.json({ materials: allMaterials, resources: allMaterials });
   });
 
-  // 20c. ADMIN: Upload Study Material (PDF with View-Only support)
-  app.post("/api/admin/materials", (req, res) => {
+  // 20c. ADMIN: Create Learning Resource (PDF or YouTube)
+  app.post(["/api/admin/materials", "/api/admin/learning-resources"], (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
     }
 
     const { 
-      batchId, classId, title, description, fileType, fileSize, 
+      resourceType, batchId, classId, title, description, fileType, fileSize, 
       pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
-      isViewOnly, allowDownload, isVisibleOnWebsite, category, level 
+      isViewOnly, allowDownload, isVisibleOnWebsite, isPublished, displayOrder,
+      category, level, youtubeUrl, thumbnailUrl, b2ThumbnailId, b2ThumbnailName,
+      duration, views
     } = req.body;
 
     const newId = `mat-${Date.now()}`;
-    const safeTitle = (title || "Study Material.pdf").trim();
-    const finalFileType = fileType || (safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc");
-    const finalDownloadUrl = (downloadUrl && downloadUrl !== "#") ? downloadUrl : `/api/files/download/${newId}`;
-    const finalPdfUrl = pdfUrl || `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}`;
+    const resType = resourceType === "youtube" || fileType === "youtube" ? "youtube" : "pdf";
+    
+    let safeTitle = (title || (resType === "youtube" ? "YouTube Video Lesson" : "Study Material.pdf")).trim();
+    let finalFileType = fileType || (resType === "youtube" ? "youtube" : (safeTitle.toLowerCase().endsWith(".pdf") ? "pdf" : "doc"));
+    let finalDownloadUrl = (downloadUrl && downloadUrl !== "#") ? downloadUrl : `/api/files/download/${newId}`;
+    let finalPdfUrl = pdfUrl || (resType === "pdf" ? `/api/files/pdf/${newId}/${encodeURIComponent(safeTitle)}` : undefined);
+    
+    let finalYoutubeUrl = youtubeUrl;
+    let finalThumbnailUrl = thumbnailUrl;
+
+    if (resType === "youtube") {
+      if (youtubeUrl) {
+        const vidId = extractYouTubeVideoId(youtubeUrl);
+        if (vidId && !finalThumbnailUrl) {
+          finalThumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
+        }
+      }
+    }
 
     const newMat: DBStudyMaterial = {
       id: newId,
-      batchId: batchId || "batch-spoken-oct-2026",
+      resourceType: resType,
+      batchId: batchId || "all",
       classId,
       title: safeTitle,
-      description: description || "Study materials uploaded by academy instructor.",
+      description: description || (resType === "youtube" ? "Video lesson for practical spoken English fluency." : "Study materials uploaded by academy instructor."),
       fileType: finalFileType,
-      fileSize: fileSize || "1.5 MB",
+      fileSize: fileSize || (resType === "youtube" ? "Video" : "1.5 MB"),
       downloadUrl: finalDownloadUrl,
       pdfUrl: finalPdfUrl,
       b2FileId,
       b2FileName,
-      mimeType: mimeType || getSafeFileMimeType(safeTitle),
+      mimeType: mimeType || (resType === "youtube" ? "video/youtube" : getSafeFileMimeType(safeTitle)),
       isViewOnly: isViewOnly !== undefined ? Boolean(isViewOnly) : true,
       allowDownload: Boolean(allowDownload),
-      isVisibleOnWebsite: isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : true,
-      category: category || "Worksheets",
+      isVisibleOnWebsite: isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : (isPublished !== undefined ? Boolean(isPublished) : true),
+      isPublished: isPublished !== undefined ? Boolean(isPublished) : (isVisibleOnWebsite !== undefined ? Boolean(isVisibleOnWebsite) : true),
+      displayOrder: displayOrder !== undefined ? Number(displayOrder) : studyMaterials.length + 1,
+      category: category || (resType === "youtube" ? "Daily English" : "Worksheets"),
       level: level || "All Levels",
       uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      youtubeUrl: finalYoutubeUrl,
+      thumbnailUrl: finalThumbnailUrl,
+      b2ThumbnailId,
+      b2ThumbnailName,
+      duration: duration || "12:00",
+      views: views || "1.2K views",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     studyMaterials.unshift(newMat);
@@ -3819,11 +4550,12 @@ www.witslingo.com`
     }
     savePersistedMaterials();
 
-    res.json({ success: true, material: newMat, materials: studyMaterials });
+    const sorted = sortLearningMaterials(studyMaterials);
+    res.json({ success: true, material: newMat, materials: sorted, resources: sorted });
   });
 
-  // 20d. ADMIN: Update Study Material (PDF Link, B2 references & Permissions)
-  app.put("/api/admin/materials/:id", async (req, res) => {
+  // 20d. ADMIN: Update Learning Resource (PDF / YouTube / B2 references & Permissions)
+  app.put(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -3832,20 +4564,28 @@ www.witslingo.com`
     const { id } = req.params;
     const mat = studyMaterials.find(m => m.id === id);
     if (!mat) {
-      return res.status(404).json({ error: "Study material not found." });
+      return res.status(404).json({ error: "Study material or learning resource not found." });
     }
 
     const { 
-      title, description, batchId, classId, fileType, fileSize, 
+      resourceType, title, description, batchId, classId, fileType, fileSize, 
       pdfUrl, downloadUrl, b2FileId, b2FileName, mimeType,
-      isViewOnly, allowDownload, isVisibleOnWebsite, category, level 
+      isViewOnly, allowDownload, isVisibleOnWebsite, isPublished, displayOrder,
+      category, level, youtubeUrl, thumbnailUrl, b2ThumbnailId, b2ThumbnailName,
+      duration, views
     } = req.body;
 
-    // If replacing file with a new B2 upload, safely cleanup old B2 file if different
+    // If replacing PDF file with a new B2 upload, safely cleanup old B2 file if different
     if (b2FileId && mat.b2FileId && b2FileId !== mat.b2FileId) {
       deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
     }
 
+    // If replacing custom thumbnail with a new B2 upload, safely cleanup old B2 thumbnail if different
+    if (b2ThumbnailId && mat.b2ThumbnailId && b2ThumbnailId !== mat.b2ThumbnailId) {
+      deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {});
+    }
+
+    if (resourceType !== undefined) mat.resourceType = resourceType;
     if (title !== undefined) mat.title = title;
     if (description !== undefined) mat.description = description;
     if (batchId !== undefined) mat.batchId = batchId;
@@ -3860,15 +4600,34 @@ www.witslingo.com`
     if (isViewOnly !== undefined) mat.isViewOnly = Boolean(isViewOnly);
     if (allowDownload !== undefined) mat.allowDownload = Boolean(allowDownload);
     if (isVisibleOnWebsite !== undefined) mat.isVisibleOnWebsite = Boolean(isVisibleOnWebsite);
+    if (isPublished !== undefined) {
+      mat.isPublished = Boolean(isPublished);
+      mat.isVisibleOnWebsite = Boolean(isPublished);
+    }
+    if (displayOrder !== undefined) mat.displayOrder = Number(displayOrder);
     if (category !== undefined) mat.category = category;
     if (level !== undefined) mat.level = level;
+    if (youtubeUrl !== undefined) {
+      mat.youtubeUrl = youtubeUrl;
+      const vidId = extractYouTubeVideoId(youtubeUrl);
+      if (vidId && !thumbnailUrl && !mat.thumbnailUrl) {
+        mat.thumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
+      }
+    }
+    if (thumbnailUrl !== undefined) mat.thumbnailUrl = thumbnailUrl;
+    if (b2ThumbnailId !== undefined) mat.b2ThumbnailId = b2ThumbnailId;
+    if (b2ThumbnailName !== undefined) mat.b2ThumbnailName = b2ThumbnailName;
+    if (duration !== undefined) mat.duration = duration;
+    if (views !== undefined) mat.views = views;
+    mat.updatedAt = new Date().toISOString();
 
     savePersistedMaterials();
-    res.json({ success: true, material: mat, materials: studyMaterials });
+    const sorted = sortLearningMaterials(studyMaterials);
+    res.json({ success: true, material: mat, materials: sorted, resources: sorted });
   });
 
-  // 20e. ADMIN: Delete Study Material with B2 Object Cleanup
-  app.delete("/api/admin/materials/:id", async (req, res) => {
+  // 20e. ADMIN: Delete Learning Resource with B2 Object Cleanup
+  app.delete(["/api/admin/materials/:id", "/api/admin/learning-resources/:id"], async (req, res) => {
     const auth = verifyAuthToken(req.headers.authorization);
     if (!auth || auth.role !== "admin") {
       return res.status(403).json({ error: "Admin authorization required." });
@@ -3877,12 +4636,15 @@ www.witslingo.com`
     const { id } = req.params;
     const idx = studyMaterials.findIndex(m => m.id === id);
     if (idx === -1) {
-      return res.status(404).json({ error: "Study material not found." });
+      return res.status(404).json({ error: "Study material or resource not found." });
     }
 
     const mat = studyMaterials[idx];
     if (mat.b2FileId || mat.b2FileName) {
       deleteFileFromB2(mat.b2FileId, mat.b2FileName).catch(() => {});
+    }
+    if (mat.b2ThumbnailId || mat.b2ThumbnailName) {
+      deleteFileFromB2(mat.b2ThumbnailId, mat.b2ThumbnailName).catch(() => {});
     }
 
     // Cleanup local disk copy if exists
@@ -3898,7 +4660,8 @@ www.witslingo.com`
     studyMaterials.splice(idx, 1);
     savePersistedMaterials();
 
-    res.json({ success: true, message: "Study material deleted.", materials: studyMaterials });
+    const sorted = sortLearningMaterials(studyMaterials);
+    res.json({ success: true, message: "Resource deleted.", materials: sorted, resources: sorted });
   });
 
   // 20f. ADMIN: Check Backblaze B2 Connection Status
@@ -4138,16 +4901,8 @@ www.witslingo.com`
 
       // Check download permissions
       if (mat) {
-        // If download is disabled and user is not admin
-        if (!mat.allowDownload && !isAdmin) {
-          return res.status(403).json({
-            error: "Downloads are restricted for this view-only study material.",
-            code: "DOWNLOAD_NOT_PERMITTED"
-          });
-        }
-
-        // If material is private to a batch and not publicly visible on website
-        if (!mat.isVisibleOnWebsite && !isAdmin) {
+        // If material is private to a specific batch and not publicly visible on website
+        if (mat.isVisibleOnWebsite === false && !isAdmin) {
           if (!auth) {
             return res.status(401).json({ error: "Authentication required to download batch materials." });
           }
@@ -4158,7 +4913,8 @@ www.witslingo.com`
         }
       }
 
-      const filename = mat?.title || memFile?.filename || "Study-Material.pdf";
+      const rawTitle = mat?.title || memFile?.filename || "Study-Material.pdf";
+      const filename = rawTitle.toLowerCase().endsWith(".pdf") ? rawTitle : `${rawTitle}.pdf`;
       const mimeType = mat?.mimeType || memFile?.mimeType || getSafeFileMimeType(filename);
 
       let buffer: Buffer | null = null;
@@ -4216,6 +4972,12 @@ www.witslingo.com`
 
       // 3. Fallback: If external Google Drive / cloud URL
       if (!buffer && mat?.pdfUrl && mat.pdfUrl.startsWith("http")) {
+        const gDriveMatch = mat.pdfUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i) ||
+                            mat.pdfUrl.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i) ||
+                            mat.pdfUrl.match(/drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]+)/i);
+        if (gDriveMatch && gDriveMatch[1]) {
+          return res.redirect(`https://drive.google.com/uc?export=download&id=${gDriveMatch[1]}`);
+        }
         return res.redirect(mat.pdfUrl);
       }
 
@@ -4532,20 +5294,7 @@ www.witslingo.com`
     res.status(404).json({ error: "Recording not found." });
   });
 
-  // DELETE Material
-  app.delete("/api/admin/materials/:id", (req, res) => {
-    const auth = verifyAuthToken(req.headers.authorization);
-    if (!auth || auth.role !== "admin") {
-      return res.status(403).json({ error: "Admin authorization required." });
-    }
-    const { id } = req.params;
-    const idx = studyMaterials.findIndex(m => m.id === id);
-    if (idx !== -1) {
-      studyMaterials.splice(idx, 1);
-      return res.json({ success: true, message: "Study material deleted.", materials: studyMaterials });
-    }
-    res.status(404).json({ error: "Material not found." });
-  });
+
 
   // 23. CMS: Public Website Content & Admin Editable Content
   app.get("/api/cms/content", (req, res) => {

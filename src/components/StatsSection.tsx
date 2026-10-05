@@ -79,16 +79,11 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ siteSettings }) => {
           })}
         </div>
 
-        {/* Short Statement with clean styling */}
-        <div className="mt-12 max-w-3xl mx-auto text-center bg-white border border-purple-100/90 rounded-2xl p-6 sm:p-8 shadow-xs">
-          <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-medium">
-            “Our journey has already helped learners improve their English from the beginning level towards advanced communication. Now, Wits Lingo is returning with renewed energy, fresh ideas and new opportunities.”
-          </p>
-          <div className="mt-3.5 flex items-center justify-center gap-2 text-xs font-bold text-[#4A1D96]">
-            <span>Wits Lingo Academy</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500 font-normal">Dhakka, Amroha, Uttar Pradesh</span>
-          </div>
+        {/* Location & Trust Footer */}
+        <div className="mt-10 max-w-xl mx-auto text-center flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
+          <span className="text-purple-800 font-bold">{siteSettings?.academyName || 'Wits Lingo Academy'}</span>
+          <span>•</span>
+          <span>{siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh'}</span>
         </div>
 
       </div>

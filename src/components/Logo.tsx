@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -6,16 +6,64 @@ interface LogoProps {
   showTagline?: boolean;
   className?: string;
   iconOnly?: boolean;
+  customLogoUrl?: string;
 }
+
+const getResolvedLogoUrl = (customUrl?: string): string => {
+  if (customUrl) return customUrl;
+  try {
+    const saved = localStorage.getItem('wits_lingo_site_settings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.logoUrl) {
+        const v = parsed.logoVersion ? `?v=${parsed.logoVersion}` : '';
+        return parsed.logoUrl.includes('?') ? parsed.logoUrl : `${parsed.logoUrl}${v}`;
+      }
+    }
+  } catch {}
+  return '/logo.svg';
+};
 
 export const Logo: React.FC<LogoProps> = ({ 
   size = 'md', 
   variant = 'dark', 
   showTagline = false,
   className = '',
-  iconOnly = false
+  iconOnly = false,
+  customLogoUrl
 }) => {
   const isLight = variant === 'light';
+
+  const [currentLogo, setCurrentLogo] = useState<string>(() => getResolvedLogoUrl(customLogoUrl));
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    if (customLogoUrl) {
+      setCurrentLogo(customLogoUrl);
+      setImgError(false);
+      return;
+    }
+
+    const handleLogoUpdate = (e: any) => {
+      setImgError(false);
+      if (e?.detail) {
+        const url = typeof e.detail === 'string' ? e.detail : e.detail.logoUrl;
+        if (url) {
+          const v = e.detail?.logoVersion ? `?v=${e.detail.logoVersion}` : `?v=${Date.now()}`;
+          setCurrentLogo(url.includes('?') ? url : `${url}${v}`);
+          return;
+        }
+      }
+      setCurrentLogo(getResolvedLogoUrl());
+    };
+
+    window.addEventListener('wits_lingo_logo_updated', handleLogoUpdate);
+    window.addEventListener('storage', handleLogoUpdate);
+    return () => {
+      window.removeEventListener('wits_lingo_logo_updated', handleLogoUpdate);
+      window.removeEventListener('storage', handleLogoUpdate);
+    };
+  }, [customLogoUrl]);
 
   const iconSizes = {
     sm: 'w-8 h-8 sm:w-9 sm:h-9',
@@ -39,11 +87,12 @@ export const Logo: React.FC<LogoProps> = ({
     <div className={`flex items-center gap-2.5 sm:gap-3 select-none min-w-0 ${className}`}>
       {/* Official Wits Circular Mascot Logo Emblem */}
       <div
-        className={`${iconSizes[size]} rounded-full flex items-center justify-center relative overflow-hidden group flex-shrink-0 transition-transform duration-200 hover:scale-105`}
+        className={`${iconSizes[size]} rounded-full flex items-center justify-center relative overflow-hidden group shrink-0 transition-transform duration-200 hover:scale-105`}
       >
         <img
-          src="/logo.svg"
+          src={imgError ? '/logo.svg' : currentLogo}
           alt="Wits Lingo Logo"
+          onError={() => setImgError(true)}
           className="w-full h-full object-contain rounded-full shadow-md shadow-purple-950/20"
           referrerPolicy="no-referrer"
         />
@@ -74,3 +123,5 @@ export const Logo: React.FC<LogoProps> = ({
     </div>
   );
 };
+
+export default Logo;

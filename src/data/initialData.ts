@@ -1,4 +1,5 @@
 import { CourseData, Batch, TestimonialData, SiteSettings } from '../types';
+import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
 export const INITIAL_COURSES: CourseData[] = [
   {
@@ -113,7 +114,7 @@ export const INITIAL_BATCHES: Batch[] = [
     status: 'Active',
     teacherName: 'Ziyaur Rehman Zia',
     isVisibleOnWebsite: true,
-    googleMeetLink: 'https://meet.google.com/spk-oct26-live'
+    googleMeetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
   },
   {
     id: 'batch-spoken-nov-2026',
@@ -131,7 +132,7 @@ export const INITIAL_BATCHES: Batch[] = [
     status: 'Upcoming',
     teacherName: 'Ziyaur Rehman Zia',
     isVisibleOnWebsite: true,
-    googleMeetLink: 'https://meet.google.com/spk-nov26-live'
+    googleMeetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
   },
   {
     id: 'batch-found-oct-2026',
@@ -149,7 +150,7 @@ export const INITIAL_BATCHES: Batch[] = [
     status: 'Active',
     teacherName: 'Ziyaur Rehman Zia',
     isVisibleOnWebsite: true,
-    googleMeetLink: 'https://meet.google.com/fnd-oct26-live'
+    googleMeetLink: WITS_LINGO_CONFIG.GOOGLE_MEET_LINK
   }
 ];
 
@@ -190,7 +191,7 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   whatsappChannelUrl: 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k',
   instagramUrl: 'https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==',
   facebookUrl: 'https://www.facebook.com/share/1BP5jTfk9B/',
-  youtubeUrl: 'https://www.youtube.com/@witslingo',
+  youtubeUrl: 'https://youtube.com/@witslingoeng',
   announcementText: 'New Batch Starts from 1st of each month • Admissions Open for October & November 2026',
   announcementBtnText: '',
   showAnnouncement: true,
@@ -212,7 +213,8 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   razorpayPaymentLink: 'https://rzp.io/l/witslingo',
   paypalEmailOrLink: 'https://paypal.me/witslingo',
   heroVideoUrl: '/video/wits-lingo-intro.mp4',
-  heroVideoPosterUrl: '/video/wits-lingo-poster.jpg'
+  heroVideoPosterUrl: '/video/wits-lingo-poster.jpg',
+  logoUrl: '/logo.svg'
 };
 
 export const INITIAL_ANNOUNCEMENTS: import('../types').Announcement[] = [

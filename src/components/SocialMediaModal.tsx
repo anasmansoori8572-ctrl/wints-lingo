@@ -26,7 +26,7 @@ export const SocialMediaModal: React.FC<SocialMediaModalProps> = ({
   const whatsappUrl = siteSettings?.whatsappChannelUrl || 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k';
   const instagramUrl = siteSettings?.instagramUrl || 'https://www.instagram.com/witslingo?stkn=MWc0OTc5ZHU5OTVrNA==';
   const facebookUrl = siteSettings?.facebookUrl || 'https://www.facebook.com/share/1BP5jTfk9B/';
-  const youtubeUrl = siteSettings?.youtubeUrl || 'https://www.youtube.com/@witslingo';
+  const youtubeUrl = siteSettings?.youtubeUrl || 'https://youtube.com/@witslingoeng';
 
   const channels = [
     {

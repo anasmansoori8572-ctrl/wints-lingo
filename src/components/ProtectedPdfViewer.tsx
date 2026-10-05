@@ -4,10 +4,11 @@ import {
   X, ZoomIn, ZoomOut, RotateCcw, Maximize2, Minimize2, 
   ShieldCheck, Lock, AlertCircle, BookOpen, FileText, 
   ChevronLeft, ChevronRight, Moon, Sun, Sparkles, CheckCircle2,
-  ExternalLink, AlertTriangle, RefreshCw, Download
+  ExternalLink, AlertTriangle, RefreshCw, Download, Loader2
 } from 'lucide-react';
+import jsPDF from 'jspdf';
 import { optimizePdfUrl } from '../utils/pdfOptimizer';
-import { getCurriculumForDocument } from '../data/resourceCurriculumContent';
+import { getCurriculumForDocument, CurriculumContent } from '../data/resourceCurriculumContent';
 
 interface ProtectedPdfViewerProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
   batchName,
   studentName = 'Authorized Student',
   description,
-  allowDownload = false
+  allowDownload = true
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeTab, setActiveTab] = useState<'reader' | 'embed'>('reader');
@@ -38,6 +39,7 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
   const [readerTheme, setReaderTheme] = useState<'light' | 'sepia' | 'dark'>('light');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [securityToast, setSecurityToast] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
   // In-frame iframe loading and security error recovery
   const [iframeLoading, setIframeLoading] = useState<boolean>(true);
@@ -49,6 +51,334 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
 
   const optimization = optimizePdfUrl(pdfUrl || '');
   const curriculum = getCurriculumForDocument(title, category, description);
+
+  // Client-side structured PDF Generator for curriculum materials & digital guides
+  const generateClientPdf = (docTitle: string, docCategory: string, curr: CurriculumContent, sName: string, saveFilename: string) => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 16;
+    const contentWidth = pageWidth - (margin * 2);
+    let y = margin;
+
+    const addFooter = (pageNum: number) => {
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Author: Ziyaur Rehman Zia  •  Wits Lingo Academy (www.witslingo.com)', margin, pageHeight - 7);
+      doc.text(`Page ${pageNum}`, pageWidth - margin - 12, pageHeight - 7);
+    };
+
+    const addPageHeader = () => {
+      doc.setFillColor(74, 29, 150); // #4A1D96
+      doc.rect(margin, y, contentWidth, 7, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text('WITS LINGO ACADEMY • OFFICIAL STUDY MATERIAL', margin + 4, y + 4.8);
+      y += 11;
+    };
+
+    const checkPageBreak = (neededHeight: number) => {
+      if (y + neededHeight > pageHeight - margin - 14) {
+        doc.addPage();
+        y = margin;
+        addPageHeader();
+      }
+    };
+
+    // First page top branding banner
+    doc.setFillColor(74, 29, 150);
+    doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text('WITS LINGO ACADEMY', margin + 6, y + 8);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(233, 213, 255);
+    doc.text('A Global Language Platform  |  Master Spoken English Fluency', margin + 6, y + 14);
+    y += 24;
+
+    // Document Title Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.4);
+    const titleLines = doc.splitTextToSize(docTitle, contentWidth - 12);
+    const titleBoxHeight = Math.max(18, (titleLines.length * 5.5) + 10);
+    doc.roundedRect(margin, y, contentWidth, titleBoxHeight, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text(titleLines, margin + 6, y + 6.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Category: ${docCategory}   |   Instructor: Ziyaur Rehman Zia   |   Authorized For: ${sName}`, margin + 6, y + titleBoxHeight - 3.5);
+    y += titleBoxHeight + 5;
+
+    // Render each curriculum page
+    curr.pages.forEach((page, pIdx) => {
+      if (pIdx > 0) {
+        checkPageBreak(25);
+      }
+
+      // Page / Module Heading
+      checkPageBreak(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(74, 29, 150);
+      doc.text(page.heading, margin, y);
+      y += 4.5;
+
+      if (page.subheading) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        const subLines = doc.splitTextToSize(page.subheading, contentWidth);
+        doc.text(subLines, margin, y);
+        y += (subLines.length * 4) + 1.5;
+      }
+      y += 1.5;
+
+      // Sections
+      page.sections.forEach(sec => {
+        if (sec.type === 'text' && sec.content) {
+          checkPageBreak(14);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(51, 65, 85);
+          const lines = doc.splitTextToSize(sec.content, contentWidth);
+          doc.text(lines, margin, y);
+          y += (lines.length * 4) + 3;
+        } else if (sec.type === 'rule') {
+          const ruleLines = doc.splitTextToSize(sec.content || '', contentWidth - 12);
+          const boxHeight = 10 + (ruleLines.length * 4);
+          checkPageBreak(boxHeight + 4);
+          doc.setFillColor(255, 251, 235);
+          doc.setDrawColor(253, 230, 138);
+          doc.roundedRect(margin, y, contentWidth, boxHeight, 1.5, 1.5, 'FD');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(146, 64, 14);
+          doc.text(sec.title || 'Key Principle:', margin + 5, y + 5);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(120, 53, 15);
+          doc.text(ruleLines, margin + 5, y + 9.5);
+          y += boxHeight + 3.5;
+        } else if (sec.type === 'vocabulary' && sec.items) {
+          sec.items.forEach(item => {
+            const hasSentence = Boolean(item.sentence);
+            const boxH = hasSentence ? 14 : 9;
+            checkPageBreak(boxH + 3);
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.roundedRect(margin, y, contentWidth, boxH, 1.2, 1.2, 'FD');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(74, 29, 150);
+            doc.text(`• ${item.word || ''}`, margin + 4, y + 5);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(71, 85, 105);
+            const meaningClean = (item.meaning || '').replace(/[^\x00-\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (meaningClean) {
+              const mLines = doc.splitTextToSize(`— ${meaningClean}`, contentWidth - 45);
+              doc.text(mLines, margin + 35, y + 5);
+            }
+
+            if (item.sentence) {
+              doc.setFont('helvetica', 'italic');
+              doc.setFontSize(7.5);
+              doc.setTextColor(100, 116, 139);
+              const sentenceText = `Example: "${item.sentence}"`;
+              const sLines = doc.splitTextToSize(sentenceText, contentWidth - 10);
+              doc.text(sLines, margin + 6, y + 10);
+            }
+            y += boxH + 2.5;
+          });
+        } else if (sec.type === 'dialogue' && sec.items) {
+          checkPageBreak(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(74, 29, 150);
+          doc.text(sec.title || 'Practical Dialogue:', margin, y);
+          y += 4.5;
+
+          sec.items.forEach(item => {
+            const speechLines = doc.splitTextToSize(`"${item.text || ''}"`, contentWidth - 28);
+            const dH = (speechLines.length * 4) + 2;
+            checkPageBreak(dH + 2);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(30, 41, 59);
+            doc.text(`${item.speaker || 'Speaker'}:`, margin + 3, y);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text(speechLines, margin + 25, y);
+            y += dH;
+          });
+          y += 2.5;
+        } else if (sec.type === 'practice' && sec.items) {
+          checkPageBreak(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(16, 185, 129);
+          doc.text(sec.title || 'Daily Practice Drill:', margin, y);
+          y += 4.5;
+
+          sec.items.forEach((item, idx) => {
+            const pLines = doc.splitTextToSize(`${idx + 1}. ${item.text || item.sentence || ''}`, contentWidth - 6);
+            checkPageBreak((pLines.length * 4) + 2);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(51, 65, 85);
+            doc.text(pLines, margin + 3, y);
+            y += (pLines.length * 4) + 1.5;
+          });
+          y += 2.5;
+        } else if (sec.type === 'table' && sec.tableData) {
+          const headers = sec.tableData.headers;
+          const colWidth = contentWidth / headers.length;
+          checkPageBreak(20);
+
+          doc.setFillColor(237, 233, 254);
+          doc.rect(margin, y, contentWidth, 6, 'F');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7.5);
+          doc.setTextColor(74, 29, 150);
+          headers.forEach((h, hIdx) => {
+            doc.text(h, margin + (hIdx * colWidth) + 2, y + 4.2);
+          });
+          y += 6;
+
+          sec.tableData.rows.forEach((row, rIdx) => {
+            checkPageBreak(6);
+            if (rIdx % 2 === 1) {
+              doc.setFillColor(248, 250, 252);
+              doc.rect(margin, y, contentWidth, 5.5, 'F');
+            }
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.setTextColor(51, 65, 85);
+            row.forEach((cell, cIdx) => {
+              doc.text(cell, margin + (cIdx * colWidth) + 2, y + 3.8);
+            });
+            y += 5.5;
+          });
+          y += 3;
+        }
+      });
+    });
+
+    // Add page numbering footer to all pages
+    const totalPagesCount = doc.internal.pages.length - 1;
+    for (let i = 1; i <= totalPagesCount; i++) {
+      doc.setPage(i);
+      addFooter(i);
+    }
+
+    doc.save(saveFilename);
+  };
+
+  // Comprehensive Real PDF Downloader
+  const handleDownloadPdf = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+
+    const safeDocName = (title || 'Study_Material')
+      .replace(/[/\\?%*:|"<>]/g, '')
+      .trim()
+      .replace(/\s+/g, '_');
+    const finalFilename = safeDocName.toLowerCase().endsWith('.pdf') ? safeDocName : `${safeDocName}.pdf`;
+
+    try {
+      const orig = (optimization.originalUrl || pdfUrl || '').trim();
+
+      // 1. Data URI or Blob URL directly available
+      if (orig.startsWith('data:application/pdf') || orig.startsWith('blob:')) {
+        const a = document.createElement('a');
+        a.href = orig;
+        a.download = finalFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        triggerToast('📥 PDF downloaded successfully!');
+        setIsDownloading(false);
+        return;
+      }
+
+      // 2. Server or External URL
+      let targetUrl = orig;
+      if (targetUrl && targetUrl !== '#' && !targetUrl.startsWith('sample:')) {
+        if (targetUrl.includes('/api/files/pdf/')) {
+          targetUrl = targetUrl.replace('/api/files/pdf/', '/api/files/download/').split('#')[0];
+        } else if (targetUrl.startsWith('/api/proxy-pdf?url=')) {
+          try {
+            const decoded = decodeURIComponent(targetUrl.replace('/api/proxy-pdf?url=', '').split('&')[0].split('#')[0]);
+            targetUrl = decoded;
+          } catch {}
+        }
+
+        // Google Drive export conversion
+        const gDriveMatch = targetUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i) ||
+                            targetUrl.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/i) ||
+                            targetUrl.match(/drive\.google\.com\/uc\?id=([a-zA-Z0-9_-]+)/i);
+
+        let fetchEndpoint = targetUrl;
+        if (gDriveMatch && gDriveMatch[1]) {
+          fetchEndpoint = `/api/proxy-pdf?url=${encodeURIComponent(`https://drive.google.com/uc?export=download&id=${gDriveMatch[1]}`)}`;
+        } else if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+          fetchEndpoint = `/api/proxy-pdf?url=${encodeURIComponent(targetUrl.split('#')[0])}`;
+        }
+
+        try {
+          const res = await fetch(fetchEndpoint);
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            const blob = await res.blob();
+            // Validate blob contains real binary content and is not empty/error
+            if (blob && blob.size > 200 && !contentType.includes('text/html')) {
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = finalFilename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+              triggerToast('📥 PDF downloaded successfully!');
+              setIsDownloading(false);
+              return;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Network file download failed, falling back to digital generator:', fetchErr);
+        }
+      }
+
+      // 3. Fallback / Built-in Digital Curriculum Guide
+      generateClientPdf(title, category, curriculum, studentName, finalFilename);
+      triggerToast('📥 PDF generated and downloaded successfully!');
+    } catch (err: any) {
+      console.error('PDF download error:', err);
+      triggerToast('❌ Error generating PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Auto-switch to embed tab if a real external embed link is provided
   useEffect(() => {
@@ -96,10 +426,10 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
         return;
       }
 
-      // Block Ctrl+S / Cmd+S (Save)
+      // Trigger download on Ctrl+S / Cmd+S (Save)
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        triggerToast('🔒 Downloading is disabled for this protected study material.');
+        handleDownloadPdf();
       }
 
       // Block Ctrl+P / Cmd+P (Print)
@@ -147,7 +477,14 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
   const activePage = curriculum.pages[currentPage - 1] || curriculum.pages[0];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-hidden animate-in fade-in-50 duration-150 overscroll-contain">
+    <div 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-hidden animate-in fade-in-50 duration-150 overscroll-contain"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       
       {/* Toast Alert */}
       {securityToast && (
@@ -293,21 +630,22 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
               </button>
             </div>
 
-            {/* Download Button (Only when allowed) */}
-            {allowDownload && optimization.originalUrl && (
-              <a
-                href={optimization.originalUrl.includes('/api/files/pdf/') 
-                  ? optimization.originalUrl.replace('/api/files/pdf/', '/api/files/download/') 
-                  : (optimization.originalUrl.startsWith('http') ? optimization.originalUrl : `/api/files/download/${encodeURIComponent(title)}`)}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 rounded-xl text-emerald-700 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
-                title="Download Material"
+            {/* Download Button */}
+            {allowDownload !== false && (
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isDownloading}
+                className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-emerald-700 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold disabled:opacity-60 shadow-2xs"
+                title="Download PDF to Device"
               >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Download</span>
-              </a>
+                {isDownloading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{isDownloading ? 'Downloading...' : 'Download PDF'}</span>
+              </button>
             )}
 
             {/* Open in Tab Button */}
@@ -336,10 +674,11 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-              title="Close Reader"
+              className="p-2 sm:px-2.5 sm:py-2 rounded-xl text-slate-500 hover:text-white hover:bg-rose-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-rose-600 dark:hover:text-white transition-all cursor-pointer flex items-center justify-center shadow-2xs group ml-0.5"
+              title="Close Reader (Esc)"
+              aria-label="Close PDF Viewer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 transition-transform group-hover:scale-110" />
             </button>
           </div>
         </header>
@@ -653,7 +992,7 @@ export const ProtectedPdfViewer: React.FC<ProtectedPdfViewerProps> = ({
               {/* Document Footer */}
               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
                 <span>Author: Ziyaur Rehman Zia • Wits Lingo Academy</span>
-                <span>Protected against download • For student review only</span>
+                <span>Official Study Material • All Rights Reserved</span>
               </div>
             </div>
           )}

@@ -7,7 +7,7 @@ import {
   X, Check, AlertTriangle, Phone, Mail, MapPin, Eye, EyeOff, RefreshCw,
   Megaphone, Pin, Clock, Calendar, Tag, Lock, Sparkles, Link as LinkIcon, BookOpen, Bell,
   Landmark, CreditCard, Cloud, Film, UploadCloud, Copy, PlayCircle,
-  Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus
+  Image as ImageIcon, Images, ArrowUp, ArrowDown, FolderPlus, Youtube
 } from 'lucide-react';
 import { AnnouncementModal } from './AnnouncementModal';
 import { ProtectedPdfViewer } from './ProtectedPdfViewer';
@@ -17,6 +17,12 @@ import { useScrollLock } from '../hooks/useScrollLock';
 import { CountryCodePhoneInput } from './CountryCodePhoneInput';
 import { CountryPhoneCode, DEFAULT_COUNTRY_CODE, ALL_COUNTRY_PHONE_CODES } from '../data/countryPhoneCodes';
 import { AddressHierarchySelector } from './AddressHierarchySelector';
+
+function extractYouTubeVideoId(url?: string): string {
+  if (!url) return '';
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  return (match && match[1]) ? match[1] : '';
+}
 
 interface AdminPanelProps {
   currentUser: User;
@@ -36,6 +42,8 @@ interface AdminPanelProps {
   onUpdateAnnouncements?: (announcements: Announcement[]) => void;
   materials?: StudyMaterial[];
   onUpdateMaterials?: (materials: StudyMaterial[]) => void;
+  initialTab?: 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
+  onTabChange?: (tab: string) => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -55,9 +63,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   announcements = [],
   onUpdateAnnouncements,
   materials: externalMaterials = [],
-  onUpdateMaterials
+  onUpdateMaterials,
+  initialTab,
+  onTabChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings'>(initialTab || 'students');
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  const handleTabSelect = (tabId: typeof activeTab) => {
+    setActiveTab(tabId);
+    if (onTabChange) {
+      onTabChange(tabId);
+    } else {
+      try {
+        window.history.pushState(null, '', `/admin/${tabId}`);
+      } catch (e) {}
+    }
+  };
   
   // Data states
   const [students, setStudents] = useState<any[]>([]);
@@ -112,6 +139,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [courseLevelFilter, setCourseLevelFilter] = useState('all');
   const [newBulletPointForEdit, setNewBulletPointForEdit] = useState('');
   const [newBulletPointForAdd, setNewBulletPointForAdd] = useState('');
+  const [newFacilityForEdit, setNewFacilityForEdit] = useState('');
+  const [newFacilityForAdd, setNewFacilityForAdd] = useState('');
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [batchVisibilityFilter, setBatchVisibilityFilter] = useState<'all' | 'visible' | 'hidden'>('all');
@@ -123,6 +152,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingMaterial, setEditingMaterial] = useState<StudyMaterial | null>(null);
   const [previewingPdfMaterial, setPreviewingPdfMaterial] = useState<{ title: string; pdfUrl?: string; description?: string; category?: string; batchName?: string } | null>(null);
   const [materialFilterBatch, setMaterialFilterBatch] = useState<string>('all');
+  const [materialSubTab, setMaterialSubTab] = useState<'pdf' | 'youtube'>('pdf');
+  const [materialSearchQuery, setMaterialSearchQuery] = useState<string>('');
+  const [materialCategoryFilter, setMaterialCategoryFilter] = useState<string>('all');
+  const [showAddYouTubeModal, setShowAddYouTubeModal] = useState(false);
+  const [isFetchingYtMetadata, setIsFetchingYtMetadata] = useState(false);
+  const [isUploadingThumbnail, setIsUploadingThumbnail] = useState(false);
   const [showAddTestimonialModal, setShowAddTestimonialModal] = useState(false);
   const [editingTestimonial, setEditingTestimonial] = useState<TestimonialData | null>(null);
 
@@ -137,6 +172,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   } | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
   const [isUploadingHeroVideo, setIsUploadingHeroVideo] = useState(false);
+
+  // Central Website Logo Management state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [logoPreviewBg, setLogoPreviewBg] = useState<'light' | 'dark'>('dark');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
 
   // Announcements & Holiday Notices state
   const [localAnnouncements, setLocalAnnouncements] = useState<Announcement[]>(announcements || []);
@@ -175,6 +217,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     editingClass ||
     showAddRecordingModal ||
     showAddMaterialModal ||
+    showAddYouTubeModal ||
     editingMaterial ||
     previewingPdfMaterial ||
     showAddTestimonialModal ||
@@ -226,6 +269,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     level: 'Beginner to Intermediate',
     shortDescription: '',
     whatYouWillLearn: ['Master natural conversational speaking', 'Overcome public hesitation and stage fear', 'Daily vocabulary in context', 'Pronunciation and accent clarity'],
+    facilities: [
+      'Live Interactive Online Classes on Google Meet',
+      'Digital PDF Study Notes & Practice Workbooks',
+      'Telegram & WhatsApp Student Practice Community',
+      'Course Completion Certificate',
+      'Class Recording Access for Revision'
+    ],
     duration: '2 Months (40 Sessions)',
     learningFormat: 'Live Online Classroom (Evening Batches)',
     fee: 1499,
@@ -285,7 +335,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     allowDownload: false,
     category: 'Worksheets',
     level: 'All Levels',
-    isVisibleOnWebsite: true
+    isVisibleOnWebsite: true,
+    isPublished: true,
+    displayOrder: 1
+  });
+
+  const [newYouTubeResource, setNewYouTubeResource] = useState({
+    youtubeUrl: '',
+    title: '',
+    description: 'Watch this curated video lesson for practical spoken English fluency.',
+    category: 'Daily English',
+    displayOrder: 1,
+    isPublished: true,
+    thumbnailUrl: '',
+    b2ThumbnailId: '',
+    b2ThumbnailName: ''
   });
 
   const [newTestimonial, setNewTestimonial] = useState<Partial<TestimonialData>>({
@@ -518,6 +582,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     document.body.removeChild(link);
   };
 
+  const handleResendWhatsApp = async (studentId: string) => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/admin/students/${studentId}/resend-whatsapp`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerFeedback(`✓ WhatsApp enrollment message sent successfully! (Message ID: ${data.messageId || 'Delivered'})`);
+        setStudents(prev => prev.map(s => (s.id === studentId || s.admissionId === studentId) ? { ...s, whatsappDeliveryStatus: 'sent', whatsappMessageId: data.messageId } : s));
+      } else {
+        triggerFeedback(`⚠ WhatsApp dispatch notice: ${data.error || 'Check server WhatsApp Cloud API configuration'}`);
+        setStudents(prev => prev.map(s => (s.id === studentId || s.admissionId === studentId) ? { ...s, whatsappDeliveryStatus: 'failed', whatsappError: data.error } : s));
+      }
+    } catch (err: any) {
+      triggerFeedback(`⚠ Network error: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // ----------------------------------------------------------------------
   // 2. COURSES CMS HANDLERS (Editable at any time, past or post publication)
   // ----------------------------------------------------------------------
@@ -532,6 +618,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       whatYouWillLearn: Array.isArray(newCourse.whatYouWillLearn) && newCourse.whatYouWillLearn.length > 0
         ? newCourse.whatYouWillLearn
         : ['Master natural conversational speaking', 'Overcome public hesitation and stage fear', 'Daily vocabulary in context', 'Pronunciation and accent clarity'],
+      facilities: Array.isArray(newCourse.facilities) && newCourse.facilities.length > 0
+        ? newCourse.facilities
+        : [
+            'Live Interactive Online Classes on Google Meet',
+            'Digital PDF Study Notes & Practice Workbooks',
+            'Telegram & WhatsApp Student Practice Community',
+            'Course Completion Certificate',
+            'Class Recording Access for Revision'
+          ],
       duration: newCourse.duration || '2 Months (40 Sessions)',
       learningFormat: newCourse.learningFormat || 'Live Online Classroom',
       fee: Number(newCourse.fee) || 1499,
@@ -542,6 +637,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     onUpdateCourses(updated);
     setShowAddCourseModal(false);
     setNewBulletPointForAdd('');
+    setNewFacilityForAdd('');
     triggerFeedback(
       courseToAdd.isPublished
         ? `New course "${courseToAdd.name}" published live to website!`
@@ -556,6 +652,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     onUpdateCourses(updated);
     setEditingCourse(null);
     setNewBulletPointForEdit('');
+    setNewFacilityForEdit('');
     triggerFeedback(`Course "${editingCourse.name}" changes saved successfully! (Status: ${editingCourse.isPublished !== false ? 'Live Published' : 'Draft / Unpublished'})`);
   };
 
@@ -851,14 +948,139 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // ----------------------------------------------------------------------
-  // 6. STUDY MATERIALS HANDLERS (With PDF Link & View-Only Protection)
+  // 6. LEARNING RESOURCES & STUDY MATERIALS HANDLERS (PDF & YouTube)
   // ----------------------------------------------------------------------
+  const handleFetchYouTubeMetadata = async (url: string, isEditing: boolean = false) => {
+    if (!url || !url.trim()) return;
+    setIsFetchingYtMetadata(true);
+    try {
+      const res = await fetch('/api/admin/youtube-metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ url: url.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          if (isEditing) {
+            setEditingMaterial(prev => prev ? {
+              ...prev,
+              title: prev.title && prev.title !== 'YouTube Video Lesson' ? prev.title : (data.title || prev.title),
+              thumbnailUrl: prev.thumbnailUrl || data.thumbnailUrl
+            } : null);
+          } else {
+            setNewYouTubeResource(prev => ({
+              ...prev,
+              title: data.title || prev.title,
+              thumbnailUrl: data.thumbnailUrl || prev.thumbnailUrl
+            }));
+          }
+          triggerFeedback('YouTube video information loaded!');
+        }
+      }
+    } catch (err) {
+      console.warn('Could not auto-fetch YouTube metadata:', err);
+    } finally {
+      setIsFetchingYtMetadata(false);
+    }
+  };
+
+  const handleUploadThumbnail = async (file: File, isEditing: boolean = false) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+    setIsUploadingThumbnail(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataBase64 = e.target?.result as string;
+        const res = await fetch('/api/admin/upload-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            filename: file.name,
+            dataBase64,
+            mimeType: file.type
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const uploadedUrl = data.url || data.b2Url;
+          if (isEditing) {
+            setEditingMaterial(prev => prev ? {
+              ...prev,
+              thumbnailUrl: uploadedUrl,
+              b2ThumbnailId: data.b2FileId,
+              b2ThumbnailName: data.b2FileName
+            } : null);
+          } else {
+            setNewYouTubeResource(prev => ({
+              ...prev,
+              thumbnailUrl: uploadedUrl,
+              b2ThumbnailId: data.b2FileId,
+              b2ThumbnailName: data.b2FileName
+            }));
+          }
+          triggerFeedback('Custom thumbnail uploaded to Backblaze B2!');
+        } else {
+          alert('Thumbnail upload failed. Please try again.');
+        }
+        setIsUploadingThumbnail(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Thumbnail upload error:', err);
+      setIsUploadingThumbnail(false);
+    }
+  };
+
+  const handleTogglePublishMaterial = async (mat: StudyMaterial) => {
+    const currentStatus = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
+    const newStatus = !currentStatus;
+    const updated: StudyMaterial = {
+      ...mat,
+      isPublished: newStatus,
+      isVisibleOnWebsite: newStatus
+    };
+
+    const updatedList = materials.map(m => m.id === mat.id ? updated : m);
+    setMaterials(updatedList);
+    if (onUpdateMaterials) onUpdateMaterials(updatedList);
+    try {
+      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
+      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`/api/admin/materials/${mat.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ isPublished: newStatus, isVisibleOnWebsite: newStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.materials && Array.isArray(data.materials)) {
+          setMaterials(data.materials);
+          if (onUpdateMaterials) onUpdateMaterials(data.materials);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to toggle publish on backend:', e);
+    }
+
+    triggerFeedback(newStatus ? `"${mat.title}" published to website.` : `"${mat.title}" unpublished (Draft mode).`);
+  };
+
   const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const opt = optimizePdfUrl(newMaterial.pdfUrl);
     const newId = `mat-${Date.now()}`;
     const mat: StudyMaterial = {
       id: newId,
+      resourceType: 'pdf',
       batchId: newMaterial.batchId || 'all',
       title: newMaterial.title,
       description: newMaterial.description,
@@ -875,7 +1097,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       category: newMaterial.category || 'Worksheets',
       level: newMaterial.level || 'All Levels',
-      isVisibleOnWebsite: newMaterial.isVisibleOnWebsite !== false
+      isVisibleOnWebsite: newMaterial.isVisibleOnWebsite !== false,
+      isPublished: newMaterial.isPublished !== false,
+      displayOrder: newMaterial.displayOrder || (materials.length + 1)
     };
 
     let updatedList = [mat, ...materials];
@@ -919,9 +1143,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       allowDownload: false,
       category: 'Worksheets',
       level: 'All Levels',
-      isVisibleOnWebsite: true
+      isVisibleOnWebsite: true,
+      isPublished: true,
+      displayOrder: materials.length + 2
     });
     triggerFeedback(`Study material "${mat.title}" published & visible on website!`);
+  };
+
+  const handleAddYouTubeResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newYouTubeResource.youtubeUrl.trim()) {
+      alert('Please enter a valid YouTube video URL.');
+      return;
+    }
+
+    const finalTitle = newYouTubeResource.title.trim() || 'YouTube Spoken English Lesson';
+    const newId = `mat-yt-${Date.now()}`;
+    const mat: StudyMaterial = {
+      id: newId,
+      resourceType: 'youtube',
+      batchId: 'all',
+      title: finalTitle,
+      description: newYouTubeResource.description.trim() || 'Watch this video lesson for practical spoken English fluency.',
+      fileType: 'youtube',
+      fileSize: 'Video',
+      downloadUrl: newYouTubeResource.youtubeUrl.trim(),
+      youtubeUrl: newYouTubeResource.youtubeUrl.trim(),
+      thumbnailUrl: newYouTubeResource.thumbnailUrl.trim() || undefined,
+      b2ThumbnailId: newYouTubeResource.b2ThumbnailId || undefined,
+      b2ThumbnailName: newYouTubeResource.b2ThumbnailName || undefined,
+      isPublished: newYouTubeResource.isPublished !== false,
+      isVisibleOnWebsite: newYouTubeResource.isPublished !== false,
+      displayOrder: newYouTubeResource.displayOrder || (materials.length + 1),
+      category: newYouTubeResource.category || 'Daily English',
+      level: 'All Levels',
+      uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      uploadedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    };
+
+    let updatedList = [mat, ...materials];
+    try {
+      const res = await fetch('/api/admin/materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(mat)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.materials && Array.isArray(data.materials)) {
+          updatedList = data.materials;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to add YouTube resource to backend:', e);
+    }
+
+    setMaterials(updatedList);
+    if (onUpdateMaterials) onUpdateMaterials(updatedList);
+    try {
+      localStorage.setItem('wits_lingo_materials', JSON.stringify(updatedList));
+      window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    setShowAddYouTubeModal(false);
+    setNewYouTubeResource({
+      youtubeUrl: '',
+      title: '',
+      description: 'Watch this curated video lesson for practical spoken English fluency.',
+      category: 'Daily English',
+      displayOrder: materials.length + 2,
+      isPublished: true,
+      thumbnailUrl: '',
+      b2ThumbnailId: '',
+      b2ThumbnailName: ''
+    });
+    triggerFeedback(`YouTube lesson "${finalTitle}" published successfully!`);
   };
 
   const handleUpdateMaterial = async (e: React.FormEvent) => {
@@ -931,12 +1228,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const updated: StudyMaterial = {
       ...editingMaterial,
       pdfUrl: opt.embedUrl || editingMaterial.pdfUrl,
-      downloadUrl: (editingMaterial.downloadUrl && editingMaterial.downloadUrl !== '#') ? editingMaterial.downloadUrl : `/api/files/download/${editingMaterial.id}`,
+      downloadUrl: (editingMaterial.downloadUrl && editingMaterial.downloadUrl !== '#') ? editingMaterial.downloadUrl : (editingMaterial.resourceType === 'youtube' ? (editingMaterial.youtubeUrl || '') : `/api/files/download/${editingMaterial.id}`),
       isViewOnly: editingMaterial.isViewOnly !== false,
       allowDownload: Boolean(editingMaterial.allowDownload),
-      category: editingMaterial.category || 'Worksheets',
+      category: editingMaterial.category || (editingMaterial.resourceType === 'youtube' ? 'Daily English' : 'Worksheets'),
       level: editingMaterial.level || 'All Levels',
-      isVisibleOnWebsite: editingMaterial.isVisibleOnWebsite !== false
+      isVisibleOnWebsite: editingMaterial.isVisibleOnWebsite !== false,
+      isPublished: editingMaterial.isPublished !== false
     };
 
     let updatedList = materials.map(m => m.id === editingMaterial.id ? updated : m);
@@ -965,16 +1263,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (e) {}
 
     setEditingMaterial(null);
-    triggerFeedback(`Study material "${updated.title}" updated.`);
+    triggerFeedback(`"${updated.title}" updated.`);
   };
 
   const handleDeleteMaterial = (matId: string, title: string) => {
     setDeleteModal({
       isOpen: true,
-      title: 'Delete Study Material',
+      title: 'Delete Learning Resource',
       itemName: title,
-      itemType: 'study resource',
-      description: `Are you sure you want to delete "${title}"? Students and website visitors will no longer be able to open or view this material.`,
+      itemType: 'learning resource',
+      description: `Are you sure you want to delete "${title}"? Any associated cloud files in Backblaze B2 will be permanently removed.`,
       onConfirm: async () => {
         let updatedList = materials.filter(m => m.id !== matId);
         try {
@@ -1000,7 +1298,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           window.dispatchEvent(new CustomEvent('wits_lingo_material_updated', { detail: updatedList }));
         } catch (e) {}
 
-        triggerFeedback(`Study material deleted.`);
+        triggerFeedback(`Learning resource deleted.`);
       }
     });
   };
@@ -1264,6 +1562,146 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     } catch (e) {}
     triggerFeedback('Hero video URL published and active on homepage!');
+  };
+
+  // ----------------------------------------------------------------------
+  // 8b. CENTRAL WEBSITE LOGO MANAGEMENT (BACKBLAZE B2 STORAGE)
+  // ----------------------------------------------------------------------
+  const handleSelectLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate mime type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(png|jpg|jpeg|webp|svg)$/i)) {
+      setLogoUploadError('Please select a valid image file (PNG, JPG, WEBP, or SVG).');
+      return;
+    }
+
+    // Validate size (<= 8MB)
+    if (file.size > 8 * 1024 * 1024) {
+      setLogoUploadError('Logo file size exceeds 8MB limit. Please choose a smaller image.');
+      return;
+    }
+
+    setLogoUploadError(null);
+    setLogoFile(file);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setLogoPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadLogo = async () => {
+    if (!logoFile && !logoPreviewUrl) {
+      setLogoUploadError('Please select an image file first.');
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    setLogoUploadError(null);
+
+    try {
+      let base64Data = logoPreviewUrl;
+      if (!base64Data && logoFile) {
+        base64Data = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.onerror = reject;
+          r.readAsDataURL(logoFile);
+        });
+      }
+
+      const res = await fetch('/api/admin/logo/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          filename: logoFile?.name || 'wits-lingo-logo.png',
+          dataBase64: base64Data,
+          mimeType: logoFile?.type || 'image/png'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const updated: SiteSettings = {
+          ...localSettings,
+          logoUrl: data.logoUrl,
+          logoVersion: data.logoVersion
+        };
+        setLocalSettings(updated);
+        onUpdateSiteSettings(updated);
+        localStorage.setItem('wits_lingo_site_settings', JSON.stringify(updated));
+
+        // Dispatch real-time global update
+        window.dispatchEvent(new CustomEvent('wits_lingo_logo_updated', {
+          detail: {
+            logoUrl: data.logoUrl,
+            logoVersion: data.logoVersion
+          }
+        }));
+
+        setLogoFile(null);
+        setLogoPreviewUrl(null);
+        triggerFeedback('Main website logo updated successfully! Published across all headers, footers & branding.');
+      } else {
+        setLogoUploadError(data.error || 'Failed to upload logo.');
+        triggerFeedback(data.error || 'Failed to upload logo.');
+      }
+    } catch (err: any) {
+      setLogoUploadError(err?.message || 'Error processing logo upload.');
+      triggerFeedback(err?.message || 'Error processing logo upload.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleResetLogo = async () => {
+    setDeleteModal({
+      isOpen: true,
+      title: 'Reset Website Logo',
+      itemName: 'Main Logo',
+      itemType: 'website branding',
+      description: 'Are you sure you want to reset the website logo to the default original Wits Lingo SVG logo? All headers and footers will revert to the default mascot emblem.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch('/api/admin/logo/reset', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            const updated: SiteSettings = {
+              ...localSettings,
+              logoUrl: '/logo.svg',
+              logoVersion: data.logoVersion || Date.now()
+            };
+            setLocalSettings(updated);
+            onUpdateSiteSettings(updated);
+            localStorage.setItem('wits_lingo_site_settings', JSON.stringify(updated));
+
+            window.dispatchEvent(new CustomEvent('wits_lingo_logo_updated', {
+              detail: {
+                logoUrl: '/logo.svg',
+                logoVersion: data.logoVersion
+              }
+            }));
+
+            setLogoFile(null);
+            setLogoPreviewUrl(null);
+            setLogoUploadError(null);
+            triggerFeedback('Website logo reset to default original SVG logo.');
+          }
+        } catch (err) {
+          triggerFeedback('Error resetting logo.');
+        }
+      }
+    });
   };
 
   // ----------------------------------------------------------------------
@@ -1552,7 +1990,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 key={tab.id}
                 id={`admin-tab-${tab.id}`}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => handleTabSelect(tab.id as any)}
                 className={`px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === tab.id
                     ? 'bg-[#4A1D96] text-white shadow-sm'
@@ -1638,6 +2076,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th className="py-3 px-4">Contact</th>
                     <th className="py-3 px-4">Batch Enrolled</th>
                     <th className="py-3 px-4">Payment</th>
+                    <th className="py-3 px-4">WhatsApp Status</th>
                     <th className="py-3 px-4 text-right rounded-r-xl">Actions</th>
                   </tr>
                 </thead>
@@ -1688,7 +2127,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             )}
                           </div>
                         </td>
+                        <td className="py-3.5 px-4">
+                          {st.whatsappDeliveryStatus === 'sent' ? (
+                            <span 
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
+                              title={`WhatsApp Confirmed\nMessage ID: ${st.whatsappMessageId || 'N/A'}`}
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Sent</span>
+                            </span>
+                          ) : st.whatsappDeliveryStatus === 'failed' ? (
+                            <span 
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200"
+                              title={`Delivery status: ${st.whatsappError || 'Meta Cloud API issue'}`}
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              <span>Failed</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              <span>Pending</span>
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
+                          <button
+                            onClick={() => handleResendWhatsApp(st.id || st.admissionId)}
+                            title="Resend WhatsApp Enrollment Confirmation Message"
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => setEditingStudent({ ...st })}
                             title="Edit Student"
@@ -1708,7 +2178,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         No students found matching your criteria.
                       </td>
                     </tr>
@@ -2556,189 +3026,434 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* TAB 6: STUDY MATERIALS & PDFS */}
+        {/* TAB 6: LEARNING RESOURCES (PDFS & YOUTUBE VIDEOS) */}
         {/* ==================================================================== */}
-        {activeTab === 'materials' && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
-                    Study Materials, PDFs & Practice Notes
-                  </h2>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                    <Lock className="w-2.5 h-2.5" />
-                    <span>View-Only Protected</span>
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Upload PDF links (Google Drive, OneDrive, or Direct PDF) with anti-download security. Students can read smoothly but cannot download.
-                </p>
-              </div>
+        {activeTab === 'materials' && (() => {
+          const pdfMaterials = materials.filter(m => m.resourceType !== 'youtube' && m.fileType !== 'youtube');
+          const ytMaterials = materials.filter(m => m.resourceType === 'youtube' || m.fileType === 'youtube');
 
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                {/* Batch Filter */}
-                <select
-                  value={materialFilterBatch}
-                  onChange={(e) => setMaterialFilterBatch(e.target.value)}
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-hidden focus:border-[#4A1D96]"
-                >
-                  <option value="all">All Batches ({materials.length})</option>
-                  {batches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({materials.filter(m => m.batchId === b.id).length})
-                    </option>
-                  ))}
-                </select>
+          const filteredPdfs = pdfMaterials.filter(m => {
+            const matchBatch = materialFilterBatch === 'all' || m.batchId === materialFilterBatch;
+            const matchCat = materialCategoryFilter === 'all' || m.category === materialCategoryFilter;
+            const matchSearch = !materialSearchQuery.trim() ||
+              m.title.toLowerCase().includes(materialSearchQuery.toLowerCase()) ||
+              m.description.toLowerCase().includes(materialSearchQuery.toLowerCase());
+            return matchBatch && matchCat && matchSearch;
+          });
 
-                <button
-                  onClick={() => setShowAddMaterialModal(true)}
-                  id="admin-add-mat-btn"
-                  className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Upload Study Resource</span>
-                </button>
-              </div>
-            </div>
+          const filteredYts = ytMaterials.filter(m => {
+            const matchCat = materialCategoryFilter === 'all' || m.category === materialCategoryFilter;
+            const matchSearch = !materialSearchQuery.trim() ||
+              m.title.toLowerCase().includes(materialSearchQuery.toLowerCase()) ||
+              m.description.toLowerCase().includes(materialSearchQuery.toLowerCase());
+            return matchCat && matchSearch;
+          });
 
-            {/* View-Only Security Feature Banner */}
-            <div className="p-4 rounded-2xl bg-linear-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
+          return (
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-purple-100 shadow-sm space-y-6">
+              {/* Section Top Header */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                 <div>
-                  <h4 className="font-bold text-slate-900">Protected PDF Viewing Engine Active</h4>
-                  <p className="text-slate-600 mt-0.5 leading-relaxed">
-                    All PDF materials uploaded here are served in a secure <strong>View-Only</strong> container. Right-click, Ctrl+S saving, Ctrl+P printing, and student file downloads are intercepted to protect your academy's proprietary intellectual property.
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-['Outfit'] font-bold text-xl text-slate-900">
+                      Learning Resources Management
+                    </h2>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                      {materials.length} Total Resources
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Manage view-only PDF study guides, worksheets, and official YouTube video lessons displayed in the website Knowledge Bank.
                   </p>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  {materialSubTab === 'pdf' ? (
+                    <button
+                      onClick={() => setShowAddMaterialModal(true)}
+                      id="admin-add-mat-btn"
+                      className="px-4 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Upload PDF Guide</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setNewYouTubeResource({
+                          youtubeUrl: '',
+                          title: '',
+                          description: 'Watch this curated video lesson for practical spoken English fluency.',
+                          category: 'Daily English',
+                          displayOrder: ytMaterials.length + 1,
+                          isPublished: true,
+                          thumbnailUrl: '',
+                          b2ThumbnailId: '',
+                          b2ThumbnailName: ''
+                        });
+                        setShowAddYouTubeModal(true);
+                      }}
+                      id="admin-add-yt-btn"
+                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add YouTube Video</span>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-purple-900 bg-white/80 px-3 py-1.5 rounded-xl border border-purple-200">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Google Drive Auto-Optimizer</span>
+
+              {/* Resource Sub-Tabs Selector */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setMaterialSubTab('pdf'); setMaterialCategoryFilter('all'); }}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      materialSubTab === 'pdf'
+                        ? 'bg-[#4A1D96] text-white shadow-xs'
+                        : 'bg-white text-slate-700 hover:bg-purple-50 hover:text-[#4A1D96] border border-slate-200'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>PDF Study Guides</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${materialSubTab === 'pdf' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-900'}`}>
+                      {pdfMaterials.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { setMaterialSubTab('youtube'); setMaterialCategoryFilter('all'); }}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      materialSubTab === 'youtube'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 border border-slate-200'
+                    }`}
+                  >
+                    <Youtube className="w-3.5 h-3.5" />
+                    <span>YouTube Video Lessons</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${materialSubTab === 'youtube' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>
+                      {ytMaterials.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Search & Category Filter Bar */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 sm:w-48">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search title, description..."
+                      value={materialSearchQuery}
+                      onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                    />
+                  </div>
+
+                  {materialSubTab === 'pdf' && (
+                    <select
+                      value={materialFilterBatch}
+                      onChange={(e) => setMaterialFilterBatch(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                    >
+                      <option value="all">All Batches</option>
+                      {batches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Materials Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {materials.filter(m => materialFilterBatch === 'all' || m.batchId === materialFilterBatch).length > 0 ? (
-                materials
-                  .filter(m => materialFilterBatch === 'all' || m.batchId === materialFilterBatch)
-                  .map((mat) => {
-                    const batchObj = batches.find(b => b.id === mat.batchId);
-                    const opt = optimizePdfUrl(mat.pdfUrl || '');
-
-                    return (
-                      <div
-                        key={mat.id}
-                        className="p-4 rounded-2xl border border-slate-200 bg-[#FAF9FC] hover:border-purple-200 hover:shadow-xs transition-all space-y-3 flex flex-col justify-between"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-purple-700">
-                            <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
-                              {mat.fileType ? mat.fileType.toUpperCase() : 'PDF'} • {mat.fileSize || '1.8 MB'}
-                            </span>
-                            <span className="text-slate-400">{mat.uploadedDate || 'Uploaded'}</span>
-                          </div>
-
-                          <div>
-                            <span className="text-[10px] font-semibold text-slate-500 block truncate">
-                              📚 {batchObj ? batchObj.name : 'Academy Wide'}
-                            </span>
-                            <h4 className="font-bold text-sm text-slate-900 mt-0.5 line-clamp-1">{mat.title}</h4>
-                            <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
-                          </div>
-
-                          {/* Security, Storage & Link Status Badges */}
-                          <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
-                            {mat.allowDownload ? (
-                              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1">
-                                <Download className="w-2.5 h-2.5" />
-                                <span>Download Allowed</span>
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-bold flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>View-Only (Protected)</span>
-                              </span>
-                            )}
-
-                            {(mat.b2FileId || mat.b2FileName || mat.pdfUrl?.includes('backblazeb2.com') || mat.pdfUrl?.includes('/api/files/pdf/')) ? (
-                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
-                                <Cloud className="w-2.5 h-2.5 text-indigo-600" />
-                                <span>Backblaze B2</span>
-                              </span>
-                            ) : mat.pdfUrl ? (
-                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium flex items-center gap-1 truncate max-w-[180px]">
-                                <LinkIcon className="w-2.5 h-2.5 flex-shrink-0" />
-                                <span className="truncate">{opt.provider === 'Google Drive' ? 'Google Drive Embed' : (opt.provider === 'Direct PDF' ? 'Direct PDF' : opt.provider)}</span>
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium flex items-center gap-1">
-                                <BookOpen className="w-2.5 h-2.5" />
-                                <span>Digital Curriculum Guide</span>
-                              </span>
-                            )}
-
-                            {mat.isVisibleOnWebsite !== false ? (
-                              <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 font-medium text-[9px]">
-                                Public on Website
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium text-[9px]">
-                                Batch Only
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
-                          <button
-                            onClick={() => setPreviewingPdfMaterial({
-                              title: mat.title,
-                              pdfUrl: mat.pdfUrl || mat.downloadUrl,
-                              description: mat.description,
-                              category: 'Batch Study Material',
-                              batchName: batchObj?.name || 'Spoken English Batch'
-                            })}
-                            className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                            title="Test View-Only Reader as a student"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Test Reader</span>
-                          </button>
-
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => setEditingMaterial(mat)}
-                              className="p-1.5 text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
-                              title="Edit Material & PDF Link"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMaterial(mat.id, mat.title)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Material"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
+              {/* View-Only Security Notice Banner */}
+              {materialSubTab === 'pdf' ? (
+                <div className="p-4 rounded-2xl bg-linear-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#4A1D96] text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900">Protected PDF Viewing Engine Active</h4>
+                      <p className="text-slate-600 mt-0.5 leading-relaxed">
+                        PDF notes and worksheets are stored in <strong>Backblaze B2</strong> and rendered in a secure View-Only container. Right-click, Ctrl+S save, and native saving are intercepted to protect academy notes.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-purple-900 bg-white/80 px-3 py-1.5 rounded-xl border border-purple-200">
+                    <Cloud className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Backblaze B2 Cloud Storage</span>
+                  </div>
+                </div>
               ) : (
-                <div className="col-span-3 py-12 text-center text-slate-400">
-                  No materials found for this batch. Click "Upload Study Resource" to add files.
+                <div className="p-4 rounded-2xl bg-linear-to-r from-red-50 via-rose-50 to-red-50 border border-red-200/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Youtube className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900">Official YouTube Learning Resources</h4>
+                      <p className="text-slate-600 mt-0.5 leading-relaxed">
+                        Add video lessons by pasting the YouTube URL. Video titles and default thumbnails are auto-retrieved, and entire cards on the website are clickable to take learners to YouTube.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 text-[11px] font-bold text-red-900 bg-white/80 px-3 py-1.5 rounded-xl border border-red-200">
+                    <ExternalLink className="w-3.5 h-3.5 text-red-600" />
+                    <span>Auto-Embed & Thumbnail Engine</span>
+                  </div>
                 </div>
               )}
+
+              {/* ================================================================ */}
+              {/* SUB-TAB 1: PDF STUDY GUIDES GRID */}
+              {/* ================================================================ */}
+              {materialSubTab === 'pdf' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {filteredPdfs.length > 0 ? (
+                    filteredPdfs.map((mat) => {
+                      const batchObj = batches.find(b => b.id === mat.batchId);
+                      const opt = optimizePdfUrl(mat.pdfUrl || '');
+                      const isPub = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
+
+                      return (
+                        <div
+                          key={mat.id}
+                          className={`p-4.5 rounded-2xl border transition-all space-y-3 flex flex-col justify-between ${
+                            isPub ? 'border-slate-200 bg-[#FAF9FC] hover:border-purple-300 shadow-2xs' : 'border-dashed border-amber-300 bg-amber-50/40'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
+                              <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900">
+                                {mat.category || 'Worksheets'}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  #{mat.displayOrder || 1}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-500 font-semibold">
+                                  {mat.fileSize || '1.8 MB'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="text-[10px] font-semibold text-slate-500 block truncate">
+                                📚 {batchObj ? batchObj.name : 'Academy Wide (All Batches)'}
+                              </span>
+                              <h4 className="font-bold text-sm text-slate-900 mt-0.5 line-clamp-1">{mat.title}</h4>
+                              <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
+                            </div>
+
+                            {/* Storage & Visibility Status Badges */}
+                            <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
+                              {/* Publish Status Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePublishMaterial(mat)}
+                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                                  isPub
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                                }`}
+                                title="Click to Toggle Publish / Draft status"
+                              >
+                                {isPub ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
+                                <span>{isPub ? 'Published' : 'Draft (Unpublished)'}</span>
+                              </button>
+
+                              {mat.allowDownload ? (
+                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold flex items-center gap-1">
+                                  <Download className="w-2.5 h-2.5" />
+                                  <span>Download On</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  <span>View-Only</span>
+                                </span>
+                              )}
+
+                              {(mat.b2FileId || mat.b2FileName || mat.pdfUrl?.includes('backblazeb2.com') || mat.pdfUrl?.includes('/api/files/pdf/')) ? (
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
+                                  <Cloud className="w-2.5 h-2.5 text-indigo-600" />
+                                  <span>B2 Cloud</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 font-medium truncate max-w-[140px]">
+                                  {opt.provider}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => setPreviewingPdfMaterial({
+                                title: mat.title,
+                                pdfUrl: mat.pdfUrl || mat.downloadUrl,
+                                description: mat.description,
+                                category: mat.category || 'Study Material',
+                                batchName: batchObj?.name || 'Wits Lingo Academy'
+                              })}
+                              className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-[#4A1D96] text-[#4A1D96] hover:text-white border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Test View-Only Reader as a student"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Test Reader</span>
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setEditingMaterial(mat)}
+                                className="p-1.5 text-slate-500 hover:text-[#4A1D96] hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Material & Replace PDF"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMaterial(mat.id, mat.title)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Delete PDF Resource"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-3 py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      No PDF study guides match the selected filters. Click "Upload PDF Guide" to add materials.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================================================================ */}
+              {/* SUB-TAB 2: YOUTUBE VIDEO LESSONS GRID */}
+              {/* ================================================================ */}
+              {materialSubTab === 'youtube' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {filteredYts.length > 0 ? (
+                    filteredYts.map((mat) => {
+                      const isPub = mat.isPublished !== false && mat.isVisibleOnWebsite !== false;
+                      const thumb = mat.thumbnailUrl || (mat.youtubeUrl ? `https://img.youtube.com/vi/${extractYouTubeVideoId(mat.youtubeUrl) || 'dQw4w9WgXcQ'}/hqdefault.jpg` : '');
+
+                      return (
+                        <div
+                          key={mat.id}
+                          className={`p-4.5 rounded-2xl border transition-all space-y-3 flex flex-col justify-between ${
+                            isPub ? 'border-slate-200 bg-[#FAF9FC] hover:border-red-300 shadow-2xs' : 'border-dashed border-amber-300 bg-amber-50/40'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            {/* Video Thumbnail Preview */}
+                            <div className="relative aspect-video rounded-xl bg-slate-900 overflow-hidden group shadow-inner">
+                              {thumb ? (
+                                <img
+                                  src={thumb}
+                                  alt={mat.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-500">
+                                  <Youtube className="w-8 h-8 text-red-500" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center shadow-md">
+                                  <Play className="w-4 h-4 fill-white ml-0.5" />
+                                </div>
+                              </div>
+                              <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white">
+                                {mat.duration || '12:00'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-1 text-[11px] font-bold">
+                              <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-700">
+                                {mat.category || 'Daily English'}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                Order #{mat.displayOrder || 1}
+                              </span>
+                            </div>
+
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-900 line-clamp-2">{mat.title}</h4>
+                              <p className="text-xs text-slate-600 line-clamp-2 mt-1">{mat.description}</p>
+                            </div>
+
+                            {/* Status & YouTube link */}
+                            <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePublishMaterial(mat)}
+                                className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer flex items-center gap-1 ${
+                                  isPub
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                                }`}
+                                title="Click to Toggle Publish / Draft status"
+                              >
+                                {isPub ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
+                                <span>{isPub ? 'Published' : 'Draft'}</span>
+                              </button>
+
+                              {mat.b2ThumbnailId && (
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                                  Custom B2 Thumbnail
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                            <a
+                              href={mat.youtubeUrl || 'https://youtube.com/@witslingoeng'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-600 text-red-700 hover:text-white border border-red-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Watch Video</span>
+                            </a>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setEditingMaterial(mat)}
+                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit YouTube Video Details"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMaterial(mat.id, mat.title)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Delete YouTube Resource"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-3 py-12 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      No YouTube video lessons added yet. Click "Add YouTube Video" above to attach lessons.
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ==================================================================== */}
         {/* TAB: HOMEPAGE HERO VIDEO MANAGEMENT (BACKBLAZE B2 & CDN) */}
@@ -3916,6 +4631,185 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
+              {/* Central Website Logo Management & Backblaze B2 Storage */}
+              <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-50/70 via-white to-indigo-50/50 border-2 border-purple-200/90 space-y-5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-200/70 pb-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#3B0764] to-[#6D28D9] text-white flex items-center justify-center shadow-xs">
+                      <ImageIcon className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <span>Main Website Logo & Central Branding</span>
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-purple-100 text-[#4A1D96] border border-purple-200">
+                          Backblaze B2 Storage
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Upload or replace the official website logo. Updates Navbar, Footer, Mobile Header, and all academy branding across the platform.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetLogo}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1.5 shadow-2xs"
+                    title="Reset to default mascot SVG logo"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-purple-700" />
+                    <span>Reset to Default Logo</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                  {/* Current Active Logo Preview */}
+                  <div className="md:col-span-5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        Active Website Logo Preview:
+                      </span>
+                      <div className="flex items-center gap-1 text-[10px] bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setLogoPreviewBg('dark')}
+                          className={`px-2 py-0.5 rounded-md font-bold transition-colors ${
+                            logoPreviewBg === 'dark' ? 'bg-[#1E1B26] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Dark Bg
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoPreviewBg('light')}
+                          className={`px-2 py-0.5 rounded-md font-bold transition-colors ${
+                            logoPreviewBg === 'light' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Light Bg
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-full p-6 rounded-2xl border flex flex-col items-center justify-center min-h-[140px] transition-colors relative shadow-2xs ${
+                        logoPreviewBg === 'dark'
+                          ? 'bg-[#1E1B26] border-slate-800 text-white'
+                          : 'bg-white border-purple-200 text-slate-900'
+                      }`}
+                    >
+                      <div className="w-20 h-20 rounded-full flex items-center justify-center p-1 relative overflow-hidden bg-white/10 border border-white/20 shadow-md">
+                        <img
+                          src={logoPreviewUrl || (localSettings.logoUrl ? `${localSettings.logoUrl}${localSettings.logoVersion ? '?v=' + localSettings.logoVersion : ''}` : '/logo.svg')}
+                          alt="Website Logo Preview"
+                          className="w-full h-full object-contain rounded-full"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = '/logo.svg';
+                          }}
+                        />
+                      </div>
+                      <div className="mt-2 text-center">
+                        <span className="text-xs font-black uppercase font-['Outfit'] tracking-wide block">
+                          WITS LINGO
+                        </span>
+                        <span className={`text-[10px] ${logoPreviewBg === 'dark' ? 'text-purple-300' : 'text-purple-700'}`}>
+                          A Global Language Platform
+                        </span>
+                      </div>
+
+                      {logoPreviewUrl && (
+                        <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-amber-400 text-amber-950 font-bold text-[9px] shadow-xs">
+                          Unsaved Preview
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload & Action Area */}
+                  <div className="md:col-span-7 space-y-3.5">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-800 block text-xs">
+                        Upload New Logo Image (PNG, JPG, WEBP, SVG)
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Recommended: Square (1:1) or circular transparent PNG/SVG with high resolution (e.g. 512×512px). Maximum file size: 8MB.
+                      </p>
+                    </div>
+
+                    {logoUploadError && (
+                      <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                        <span>{logoUploadError}</span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <label
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-dashed border-purple-300 hover:border-[#4A1D96] bg-white hover:bg-purple-50/50 text-slate-700 text-xs font-bold transition-colors cursor-pointer ${
+                          isUploadingLogo ? 'opacity-50 pointer-events-none' : ''
+                        }`}
+                      >
+                        <UploadCloud className="w-4 h-4 text-[#4A1D96]" />
+                        <span className="truncate">
+                          {logoFile ? logoFile.name : 'Choose Logo File to Upload...'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                          onChange={handleSelectLogoFile}
+                          disabled={isUploadingLogo}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {logoPreviewUrl && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLogoFile(null);
+                              setLogoPreviewUrl(null);
+                              setLogoUploadError(null);
+                            }}
+                            disabled={isUploadingLogo}
+                            className="px-3 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 text-slate-500 text-xs font-bold transition-colors cursor-pointer"
+                            title="Cancel selection"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleUploadLogo}
+                            disabled={isUploadingLogo}
+                            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-[#4A1D96] to-[#6D28D9] hover:from-[#3B0764] hover:to-[#5B21B6] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-purple-900/20 cursor-pointer disabled:opacity-50"
+                          >
+                            {isUploadingLogo ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Uploading to B2...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-3.5 h-3.5" />
+                                <span>Save & Publish Logo</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-200 text-[11px] text-purple-950 flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                      <span>
+                        Once published, the new logo is securely stored on Backblaze B2 and immediately loaded on the Navbar, Footer, Mobile Drawer, and student portal without rebuilding the code.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Academy Identity & Contact */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                 <div>
@@ -4776,6 +5670,92 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Course Facilities / Inclusions (Delivered on Admission & WhatsApp) */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="font-bold text-slate-800 block text-xs">
+                        Course Facilities & Inclusions ({newCourse.facilities?.length || 0})
+                      </label>
+                      <p className="text-[10px] text-slate-500">Included in admission confirmation & WhatsApp messages</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {newCourse.facilities && newCourse.facilities.length > 0 ? (
+                      newCourse.facilities.map((facility, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-emerald-50/60 p-1.5 rounded-xl border border-emerald-100">
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0">
+                            ✓
+                          </span>
+                          <input
+                            type="text"
+                            value={facility}
+                            onChange={(e) => {
+                              const updated = [...(newCourse.facilities || [])];
+                              updated[idx] = e.target.value;
+                              setNewCourse({ ...newCourse, facilities: updated });
+                            }}
+                            className="flex-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs text-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (newCourse.facilities || []).filter((_, i) => i !== idx);
+                              setNewCourse({ ...newCourse, facilities: updated });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remove Facility"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-400 text-xs italic py-1">No facilities configured.</p>
+                    )}
+                  </div>
+
+                  {/* Add Facility Input */}
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Add facility (e.g. 1-on-1 speaking feedback sessions)..."
+                      value={newFacilityForAdd}
+                      onChange={(e) => setNewFacilityForAdd(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newFacilityForAdd.trim()) {
+                            setNewCourse({
+                              ...newCourse,
+                              facilities: [...(newCourse.facilities || []), newFacilityForAdd.trim()]
+                            });
+                            setNewFacilityForAdd('');
+                          }
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newFacilityForAdd.trim()) {
+                          setNewCourse({
+                            ...newCourse,
+                            facilities: [...(newCourse.facilities || []), newFacilityForAdd.trim()]
+                          });
+                          setNewFacilityForAdd('');
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
                   <button
                     type="button"
@@ -5075,6 +6055,92 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* Course Facilities / Inclusions (Delivered on Admission & WhatsApp) */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="font-bold text-slate-800 block text-xs">
+                        Course Facilities & Inclusions ({editingCourse.facilities?.length || 0})
+                      </label>
+                      <p className="text-[10px] text-slate-500">Included in admission confirmation & WhatsApp messages</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {editingCourse.facilities && editingCourse.facilities.length > 0 ? (
+                      editingCourse.facilities.map((facility, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-emerald-50/60 p-1.5 rounded-xl border border-emerald-100">
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0">
+                            ✓
+                          </span>
+                          <input
+                            type="text"
+                            value={facility}
+                            onChange={(e) => {
+                              const updated = [...(editingCourse.facilities || [])];
+                              updated[idx] = e.target.value;
+                              setEditingCourse({ ...editingCourse, facilities: updated });
+                            }}
+                            className="flex-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs text-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (editingCourse.facilities || []).filter((_, i) => i !== idx);
+                              setEditingCourse({ ...editingCourse, facilities: updated });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remove Facility"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-400 text-xs italic py-1">No facilities configured.</p>
+                    )}
+                  </div>
+
+                  {/* Add Facility Input */}
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Add facility (e.g. 1-on-1 speaking feedback sessions)..."
+                      value={newFacilityForEdit}
+                      onChange={(e) => setNewFacilityForEdit(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newFacilityForEdit.trim()) {
+                            setEditingCourse({
+                              ...editingCourse,
+                              facilities: [...(editingCourse.facilities || []), newFacilityForEdit.trim()]
+                            });
+                            setNewFacilityForEdit('');
+                          }
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newFacilityForEdit.trim()) {
+                          setEditingCourse({
+                            ...editingCourse,
+                            facilities: [...(editingCourse.facilities || []), newFacilityForEdit.trim()]
+                          });
+                          setNewFacilityForEdit('');
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Footer Buttons */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                   <button
@@ -5200,19 +6266,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Live Class Google Meet Link (Shared automatically on payment confirmation)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://meet.google.com/abc-defg-hij"
-                    value={newBatch.googleMeetLink || ''}
-                    onChange={(e) => setNewBatch({ ...newBatch, googleMeetLink: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                  />
-                </div>
-
                 {/* Website Visibility Toggle */}
                 <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-50/70 border border-purple-100">
                   <div>
@@ -5311,19 +6364,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <option value="Completed">Completed</option>
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Live Class Google Meet Link (Delivered on Admission & WhatsApp)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://meet.google.com/abc-defg-hij"
-                    value={editingBatch.googleMeetLink || ''}
-                    onChange={(e) => setEditingBatch({ ...editingBatch, googleMeetLink: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                  />
                 </div>
 
                 {/* Website Visibility Toggle */}
@@ -5554,7 +6594,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* MODAL: ADD STUDY MATERIAL */}
+        {/* MODAL: ADD PDF STUDY GUIDE RESOURCE */}
         {/* ==================================================================== */}
         {showAddMaterialModal && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
@@ -5566,9 +6606,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                   <div>
                     <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                      Upload Study Resource
+                      Upload PDF Study Guide
                     </h3>
-                    <p className="text-[11px] text-slate-500">Upload PDF from your Gallery / Files or provide a cloud link</p>
+                    <p className="text-[11px] text-slate-500">Upload PDF to Backblaze B2 or provide a cloud document link</p>
                   </div>
                 </div>
                 <button onClick={() => setShowAddMaterialModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -5626,23 +6666,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Document Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 50 High-Frequency Daily Conversation Words.pdf"
-                    value={newMaterial.title}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 font-medium"
-                  />
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="font-bold text-slate-700 block mb-1">Document Title *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 50 High-Frequency Daily Words.pdf"
+                      value={newMaterial.title}
+                      onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Order #</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newMaterial.displayOrder}
+                      onChange={(e) => setNewMaterial({ ...newMaterial, displayOrder: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 font-medium"
+                    />
+                  </div>
                 </div>
 
                 {/* Public Website Visibility */}
                 <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl flex items-center justify-between">
                   <div>
                     <span className="font-bold text-purple-950 block text-xs">
-                      Display on Public Website (Learning Resources Section)
+                      Publish on Website (Learning Resources Section)
                     </span>
                     <span className="text-[11px] text-purple-700">
                       Visible in the website's PDF Study Guides & Knowledge Bank
@@ -5651,7 +6703,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <input
                     type="checkbox"
                     checked={newMaterial.isVisibleOnWebsite}
-                    onChange={(e) => setNewMaterial({ ...newMaterial, isVisibleOnWebsite: e.target.checked })}
+                    onChange={(e) => setNewMaterial({ ...newMaterial, isVisibleOnWebsite: e.target.checked, isPublished: e.target.checked })}
                     className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
                   />
                 </div>
@@ -5713,7 +6765,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <span>Allow Student File Download</span>
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      Enable a direct download button for enrolled students and website visitors
+                      Enable a direct download button for students and website visitors
                     </span>
                   </div>
                   <input
@@ -5722,31 +6774,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => setNewMaterial({ ...newMaterial, allowDownload: e.target.checked })}
                     className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
                   />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">File Type</label>
-                    <select
-                      value={newMaterial.fileType}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, fileType: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    >
-                      <option value="pdf">PDF Document</option>
-                      <option value="doc">Word / Notes</option>
-                      <option value="audio">Audio Drills</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">File Size</label>
-                    <input
-                      type="text"
-                      value={newMaterial.fileSize}
-                      onChange={(e) => setNewMaterial({ ...newMaterial, fileSize: e.target.value })}
-                      placeholder="1.5 MB"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    />
-                  </div>
                 </div>
 
                 <div>
@@ -5773,6 +6800,220 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="px-5 py-2 rounded-xl bg-[#4A1D96] hover:bg-[#3B0764] text-white font-bold cursor-pointer shadow-xs"
                   >
                     Upload Resource
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* MODAL: ADD YOUTUBE VIDEO LEARNING RESOURCE */}
+        {/* ==================================================================== */}
+        {showAddYouTubeModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                    <Youtube className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
+                      Add YouTube Video Resource
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Provide a YouTube link; title & thumbnail will be auto-fetched</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAddYouTubeModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddYouTubeResource} className="space-y-3.5 text-xs">
+                {/* YouTube URL */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">YouTube Video URL *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={newYouTubeResource.youtubeUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewYouTubeResource({ ...newYouTubeResource, youtubeUrl: val });
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value && !newYouTubeResource.title) {
+                          handleFetchYouTubeMetadata(e.target.value, false);
+                        }
+                      }}
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
+                    />
+                    <button
+                      type="button"
+                      disabled={isFetchingYtMetadata || !newYouTubeResource.youtubeUrl.trim()}
+                      onClick={() => handleFetchYouTubeMetadata(newYouTubeResource.youtubeUrl, false)}
+                      className="px-3.5 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold border border-red-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${isFetchingYtMetadata ? 'animate-spin' : 'text-red-600'}`} />
+                      <span>{isFetchingYtMetadata ? 'Fetching...' : 'Auto-Fetch'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Video Title (Auto-fetched with editable fallback) */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Video Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 50 Daily Routine Sentences Used in Real Life"
+                    value={newYouTubeResource.title}
+                    onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, title: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Auto-fetched from YouTube. You can customize or edit this title anytime.
+                  </span>
+                </div>
+
+                {/* Category & Display Order */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Category *</label>
+                    <select
+                      value={newYouTubeResource.category}
+                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, category: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                    >
+                      <option value="Daily English">Daily English</option>
+                      <option value="Vocabulary">Vocabulary</option>
+                      <option value="Speaking Practice Conversations">Speaking Practice Conversations</option>
+                      <option value="Grammar Made Easy">Grammar Made Easy</option>
+                      <option value="English Tips">English Tips</option>
+                      <option value="Interviews & Public Speaking">Interviews & Public Speaking</option>
+                      <option value="General">General</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Display Order (1 = First)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newYouTubeResource.displayOrder}
+                      onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, displayOrder: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Short Description */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Short Description / Content</label>
+                  <textarea
+                    rows={2}
+                    value={newYouTubeResource.description}
+                    onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, description: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-red-600"
+                    placeholder="Brief description of the lesson..."
+                  />
+                </div>
+
+                {/* Custom Thumbnail Upload & Preview */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 text-xs">Video Thumbnail</span>
+                    {newYouTubeResource.b2ThumbnailId ? (
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                        Custom B2 Image Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-slate-500">
+                        YouTube Auto-Thumbnail
+                      </span>
+                    )}
+                  </div>
+
+                  {newYouTubeResource.thumbnailUrl && (
+                    <div className="relative aspect-video rounded-xl overflow-hidden bg-black/10 border border-slate-200">
+                      <img
+                        src={newYouTubeResource.thumbnailUrl}
+                        alt="Thumbnail preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-center cursor-pointer text-[11px] transition-colors">
+                      <UploadCloud className="w-3.5 h-3.5 inline mr-1 text-slate-500" />
+                      <span>{isUploadingThumbnail ? 'Uploading to B2...' : 'Upload Custom Thumbnail (B2)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingThumbnail}
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadThumbnail(file, false);
+                        }}
+                      />
+                    </label>
+
+                    {newYouTubeResource.thumbnailUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const vidId = extractYouTubeVideoId(newYouTubeResource.youtubeUrl);
+                          setNewYouTubeResource(prev => ({
+                            ...prev,
+                            thumbnailUrl: vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '',
+                            b2ThumbnailId: '',
+                            b2ThumbnailName: ''
+                          }));
+                        }}
+                        className="py-2 px-3 rounded-xl border border-slate-200 text-slate-600 hover:text-red-600 text-[11px] font-medium transition-colors cursor-pointer"
+                        title="Reset to default YouTube thumbnail"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Publish Toggle */}
+                <div className="p-3 bg-red-50/60 border border-red-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-red-950 block text-xs">
+                      Publish on Public Website
+                    </span>
+                    <span className="text-[11px] text-red-700">
+                      Instantly visible in the Video Lessons hub on Learning Resources
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newYouTubeResource.isPublished}
+                    onChange={(e) => setNewYouTubeResource({ ...newYouTubeResource, isPublished: e.target.checked })}
+                    className="w-4 h-4 text-red-600 rounded cursor-pointer accent-red-600"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddYouTubeModal(false)}
+                    className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer shadow-xs"
+                  >
+                    Publish YouTube Lesson
                   </button>
                 </div>
               </form>
@@ -6245,21 +7486,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* ==================================================================== */}
-        {/* MODAL: EDIT STUDY MATERIAL & PDF LINK */}
+        {/* MODAL: EDIT LEARNING RESOURCE (PDF OR YOUTUBE) */}
         {/* ==================================================================== */}
         {editingMaterial && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overscroll-contain smooth-scroll-viewport">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto overscroll-contain smooth-scroll-viewport">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-[#4A1D96] flex items-center justify-center">
-                    <Edit3 className="w-4 h-4" />
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    editingMaterial.resourceType === 'youtube' ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-[#4A1D96]'
+                  }`}>
+                    {editingMaterial.resourceType === 'youtube' ? <Youtube className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
                   </div>
                   <div>
                     <h3 className="font-['Outfit'] font-bold text-lg text-slate-900">
-                      Edit Study Material & PDF Link
+                      {editingMaterial.resourceType === 'youtube' ? 'Edit YouTube Video Resource' : 'Edit PDF Study Guide'}
                     </h3>
-                    <p className="text-[11px] text-slate-500">Upload new PDF from device/gallery or update cloud document link</p>
+                    <p className="text-[11px] text-slate-500">
+                      {editingMaterial.resourceType === 'youtube'
+                        ? 'Update video URL, custom thumbnail, or description'
+                        : 'Upload new PDF to Backblaze B2 or update document details'}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setEditingMaterial(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -6268,186 +7515,340 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <form onSubmit={handleUpdateMaterial} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Target Batch *</label>
-                  <select
-                    value={editingMaterial.batchId}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, batchId: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] bg-slate-50 text-slate-900 font-medium"
-                  >
-                    <option value="all">🌟 All Batches & Public Website (Knowledge Bank)</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {editingMaterial.resourceType === 'youtube' ? (
+                  <>
+                    {/* YouTube URL */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">YouTube Video URL *</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          required
+                          value={editingMaterial.youtubeUrl || editingMaterial.downloadUrl || ''}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, youtubeUrl: e.target.value, downloadUrl: e.target.value })}
+                          className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
+                        />
+                        <button
+                          type="button"
+                          disabled={isFetchingYtMetadata || !editingMaterial.youtubeUrl?.trim()}
+                          onClick={() => handleFetchYouTubeMetadata(editingMaterial.youtubeUrl || '', true)}
+                          className="px-3.5 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold border border-red-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+                        >
+                          <Sparkles className={`w-3.5 h-3.5 ${isFetchingYtMetadata ? 'animate-spin' : 'text-red-600'}`} />
+                          <span>{isFetchingYtMetadata ? 'Fetching...' : 'Re-Fetch'}</span>
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Knowledge Bank Category *</label>
-                    <select
-                      value={editingMaterial.category || 'Worksheets'}
-                      onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    >
-                      <option value="Worksheets">Worksheets</option>
-                      <option value="English Vocabulary">English Vocabulary</option>
-                      <option value="Daily Sentences">Daily Sentences</option>
-                      <option value="Grammar Guides">Grammar Guides</option>
-                      <option value="Speaking Practice">Speaking Practice</option>
-                      <option value="E-books">E-books</option>
-                      <option value="Learning Tips">Learning Tips</option>
-                      <option value="Practice Tests">Practice Tests</option>
-                      <option value="Study Notes">Study Notes</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Proficiency Level</label>
-                    <select
-                      value={editingMaterial.level || 'All Levels'}
-                      onChange={(e) => setEditingMaterial({ ...editingMaterial, level: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
-                    >
-                      <option value="All Levels">All Levels</option>
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="Foundation">Foundation</option>
-                    </select>
-                  </div>
-                </div>
+                    {/* Video Title */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Video Title *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingMaterial.title}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, title: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-red-600 text-slate-900 font-medium"
+                      />
+                    </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Document Title *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingMaterial.title}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, title: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 font-medium"
-                  />
-                </div>
+                    {/* Category & Display Order */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Category *</label>
+                        <select
+                          value={editingMaterial.category || 'Daily English'}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                        >
+                          <option value="Daily English">Daily English</option>
+                          <option value="Vocabulary">Vocabulary</option>
+                          <option value="Speaking Practice Conversations">Speaking Practice Conversations</option>
+                          <option value="Grammar Made Easy">Grammar Made Easy</option>
+                          <option value="English Tips">English Tips</option>
+                          <option value="Interviews & Public Speaking">Interviews & Public Speaking</option>
+                          <option value="General">General</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Display Order</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={editingMaterial.displayOrder || 1}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, displayOrder: parseInt(e.target.value) || 1 })}
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                        />
+                      </div>
+                    </div>
 
-                {/* Public Website Visibility */}
-                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-purple-950 block text-xs">
-                      Display on Public Website (Learning Resources Section)
-                    </span>
-                    <span className="text-[11px] text-purple-700">
-                      Visible in the website's PDF Study Guides & Knowledge Bank
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingMaterial.isVisibleOnWebsite !== false}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, isVisibleOnWebsite: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
-                  />
-                </div>
+                    {/* Short Description */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Short Description</label>
+                      <textarea
+                        rows={2}
+                        value={editingMaterial.description}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-red-600"
+                      />
+                    </div>
 
-                {/* PDF Upload / Cloud Link Engine */}
-                <PdfUploadInput
-                  pdfUrl={editingMaterial.pdfUrl || ''}
-                  onPdfUrlChange={(url) => setEditingMaterial({ ...editingMaterial, pdfUrl: url })}
-                  token={token}
-                  titleValue={editingMaterial.title}
-                  onTitleSuggest={(suggestedTitle) => {
-                    if (!editingMaterial.title || editingMaterial.title.trim() === '') {
-                      setEditingMaterial(prev => prev ? ({ ...prev, title: suggestedTitle }) : null);
-                    }
-                  }}
-                  onFileUploaded={({ fileSize, downloadUrl, b2FileId, b2FileName, mimeType }) => {
-                    setEditingMaterial(prev => prev ? ({
-                      ...prev,
-                      fileSize: fileSize || prev.fileSize,
-                      downloadUrl: downloadUrl || prev.downloadUrl,
-                      b2FileId: b2FileId || prev.b2FileId,
-                      b2FileName: b2FileName || prev.b2FileName,
-                      mimeType: mimeType || prev.mimeType,
-                      fileType: 'pdf'
-                    }) : null);
-                  }}
-                  onPreviewTest={(url) => setPreviewingPdfMaterial({
-                    title: editingMaterial.title || 'PDF Preview',
-                    pdfUrl: url,
-                    description: editingMaterial.description,
-                    category: 'Study Resource Preview'
-                  })}
-                />
+                    {/* Custom Thumbnail Upload & Preview */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800 text-xs">Video Thumbnail</span>
+                        {editingMaterial.b2ThumbnailId ? (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                            Custom B2 Thumbnail
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium text-slate-500">
+                            YouTube Auto-Thumbnail
+                          </span>
+                        )}
+                      </div>
 
-                {/* View-Only Protection Setting */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-[#4A1D96]" />
-                      <span>View-Only Protection (Strict Anti-Download)</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Prevents student downloads, print commands, and context menu saving
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingMaterial.isViewOnly !== false}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, isViewOnly: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
-                  />
-                </div>
+                      {editingMaterial.thumbnailUrl && (
+                        <div className="relative aspect-video rounded-xl overflow-hidden bg-black/10 border border-slate-200">
+                          <img
+                            src={editingMaterial.thumbnailUrl}
+                            alt="Thumbnail preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
 
-                {/* Allow Download Setting */}
-                <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
-                      <Download className="w-3 h-3 text-[#4A1D96]" />
-                      <span>Allow Student File Download</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Enable direct file downloads for students and website visitors
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingMaterial.allowDownload === true}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, allowDownload: e.target.checked })}
-                    className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
-                  />
-                </div>
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-center cursor-pointer text-[11px] transition-colors">
+                          <UploadCloud className="w-3.5 h-3.5 inline mr-1 text-slate-500" />
+                          <span>{isUploadingThumbnail ? 'Uploading to B2...' : 'Replace Thumbnail (B2)'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploadingThumbnail}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadThumbnail(file, true);
+                            }}
+                          />
+                        </label>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">File Type</label>
-                    <select
-                      value={editingMaterial.fileType}
-                      onChange={(e) => setEditingMaterial({ ...editingMaterial, fileType: e.target.value as any })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    >
-                      <option value="pdf">PDF Document</option>
-                      <option value="doc">Word / Notes</option>
-                      <option value="audio">Audio Drills</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">File Size</label>
-                    <input
-                      type="text"
-                      value={editingMaterial.fileSize}
-                      onChange={(e) => setEditingMaterial({ ...editingMaterial, fileSize: e.target.value })}
-                      placeholder="1.5 MB"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white"
-                    />
-                  </div>
-                </div>
+                        {editingMaterial.thumbnailUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const vidId = extractYouTubeVideoId(editingMaterial.youtubeUrl || '');
+                              setEditingMaterial(prev => prev ? ({
+                                ...prev,
+                                thumbnailUrl: vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : '',
+                                b2ThumbnailId: '',
+                                b2ThumbnailName: ''
+                              }) : null);
+                            }}
+                            className="py-2 px-3 rounded-xl border border-slate-200 text-slate-600 hover:text-red-600 text-[11px] font-medium transition-colors cursor-pointer"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Description / Summary</label>
-                  <textarea
-                    rows={2}
-                    value={editingMaterial.description}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-[#4A1D96]"
-                  />
-                </div>
+                    {/* Publish Toggle */}
+                    <div className="p-3 bg-red-50/60 border border-red-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-red-950 block text-xs">
+                          Publish on Public Website
+                        </span>
+                        <span className="text-[11px] text-red-700">
+                          Visible in the Video Lessons section
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={editingMaterial.isVisibleOnWebsite !== false && editingMaterial.isPublished !== false}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, isVisibleOnWebsite: e.target.checked, isPublished: e.target.checked })}
+                        className="w-4 h-4 text-red-600 rounded cursor-pointer accent-red-600"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* PDF Edit Form */}
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Target Batch *</label>
+                      <select
+                        value={editingMaterial.batchId}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, batchId: e.target.value })}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] bg-slate-50 text-slate-900 font-medium"
+                      >
+                        <option value="all">🌟 All Batches & Public Website (Knowledge Bank)</option>
+                        {batches.map(b => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Knowledge Bank Category *</label>
+                        <select
+                          value={editingMaterial.category || 'Worksheets'}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                        >
+                          <option value="Worksheets">Worksheets</option>
+                          <option value="English Vocabulary">English Vocabulary</option>
+                          <option value="Daily Sentences">Daily Sentences</option>
+                          <option value="Grammar Guides">Grammar Guides</option>
+                          <option value="Speaking Practice">Speaking Practice</option>
+                          <option value="E-books">E-books</option>
+                          <option value="Learning Tips">Learning Tips</option>
+                          <option value="Practice Tests">Practice Tests</option>
+                          <option value="Study Notes">Study Notes</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Proficiency Level</label>
+                        <select
+                          value={editingMaterial.level || 'All Levels'}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, level: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium"
+                        >
+                          <option value="All Levels">All Levels</option>
+                          <option value="Beginner">Beginner</option>
+                          <option value="Intermediate">Intermediate</option>
+                          <option value="Advanced">Advanced</option>
+                          <option value="Foundation">Foundation</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-2">
+                        <label className="font-bold text-slate-700 block mb-1">Document Title *</label>
+                        <input
+                          type="text"
+                          required
+                          value={editingMaterial.title}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, title: e.target.value })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-[#4A1D96] text-slate-900 font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Order #</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={editingMaterial.displayOrder || 1}
+                          onChange={(e) => setEditingMaterial({ ...editingMaterial, displayOrder: parseInt(e.target.value) || 1 })}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Public Website Visibility */}
+                    <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-purple-950 block text-xs">
+                          Display on Public Website (Learning Resources Section)
+                        </span>
+                        <span className="text-[11px] text-purple-700">
+                          Visible in the website's PDF Study Guides & Knowledge Bank
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={editingMaterial.isVisibleOnWebsite !== false && editingMaterial.isPublished !== false}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, isVisibleOnWebsite: e.target.checked, isPublished: e.target.checked })}
+                        className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                      />
+                    </div>
+
+                    {/* PDF Upload / Replace Engine (Backblaze B2) */}
+                    <div className="space-y-1">
+                      <span className="font-bold text-slate-700 block text-xs">
+                        Attached PDF File (Upload new file to replace)
+                      </span>
+                      <PdfUploadInput
+                        pdfUrl={editingMaterial.pdfUrl || ''}
+                        onPdfUrlChange={(url) => setEditingMaterial({ ...editingMaterial, pdfUrl: url })}
+                        token={token}
+                        titleValue={editingMaterial.title}
+                        onTitleSuggest={(suggestedTitle) => {
+                          if (!editingMaterial.title || editingMaterial.title.trim() === '') {
+                            setEditingMaterial(prev => prev ? ({ ...prev, title: suggestedTitle }) : null);
+                          }
+                        }}
+                        onFileUploaded={({ fileSize, downloadUrl, b2FileId, b2FileName, mimeType }) => {
+                          setEditingMaterial(prev => prev ? ({
+                            ...prev,
+                            fileSize: fileSize || prev.fileSize,
+                            downloadUrl: downloadUrl || prev.downloadUrl,
+                            b2FileId: b2FileId || prev.b2FileId,
+                            b2FileName: b2FileName || prev.b2FileName,
+                            mimeType: mimeType || prev.mimeType,
+                            fileType: 'pdf'
+                          }) : null);
+                        }}
+                        onPreviewTest={(url) => setPreviewingPdfMaterial({
+                          title: editingMaterial.title || 'PDF Preview',
+                          pdfUrl: url,
+                          description: editingMaterial.description,
+                          category: 'Study Resource Preview'
+                        })}
+                      />
+                    </div>
+
+                    {/* View-Only Protection Setting */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-[#4A1D96]" />
+                          <span>View-Only Protection (Strict Anti-Download)</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Prevents student downloads, print commands, and context menu saving
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={editingMaterial.isViewOnly !== false}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, isViewOnly: e.target.checked })}
+                        className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                      />
+                    </div>
+
+                    {/* Allow Download Setting */}
+                    <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-800 block text-xs flex items-center gap-1">
+                          <Download className="w-3 h-3 text-[#4A1D96]" />
+                          <span>Allow Student File Download</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Enable direct file downloads for students and website visitors
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={editingMaterial.allowDownload === true}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, allowDownload: e.target.checked })}
+                        className="w-4 h-4 text-[#4A1D96] rounded cursor-pointer accent-[#4A1D96]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">Description / Summary</label>
+                      <textarea
+                        rows={2}
+                        value={editingMaterial.description}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:border-[#4A1D96]"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                   <button

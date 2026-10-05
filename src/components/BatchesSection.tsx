@@ -48,7 +48,7 @@ export const BatchesSection: React.FC<BatchesSectionProps> = ({
           </h2>
 
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
-            To ensure every student gets daily live speaking practice and 1-on-1 feedback, we strictly enforce small-batch intake limits. Check real-time seat availability below.
+            Small-batch intake for daily live speaking practice and personalized 1-on-1 feedback. Check real-time seat availability below.
           </p>
         </div>
 

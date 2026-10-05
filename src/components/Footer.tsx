@@ -1,16 +1,15 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { MessageCircle, Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, Shield, FileText } from 'lucide-react';
+import { MessageCircle, Instagram, Facebook, Youtube, Mail, Phone, MapPin, ArrowUp, FileText } from 'lucide-react';
 import { SiteSettings } from '../types';
 
 interface FooterProps {
-  onOpenAdmin?: () => void;
   onOpenSystemReport?: () => void;
   onNavigateGallery?: () => void;
   siteSettings?: SiteSettings;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport, onNavigateGallery, siteSettings }) => {
+export const Footer: React.FC<FooterProps> = ({ onOpenSystemReport, onNavigateGallery, siteSettings }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -61,7 +60,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 <Facebook className="w-4 h-4" />
               </a>
               <a
-                href={siteSettings?.youtubeUrl || "https://www.youtube.com/@witslingo"}
+                href={siteSettings?.youtubeUrl || "https://youtube.com/@witslingoeng"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-8.5 h-8.5 rounded-xl bg-white/5 hover:bg-red-600 text-slate-300 hover:text-white flex items-center justify-center transition-colors shadow-2xs"
@@ -159,7 +158,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               </li>
               <li>
                 <a
-                  href="https://www.youtube.com/@witslingo"
+                  href="https://youtube.com/@witslingoeng"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition-colors"
@@ -193,19 +192,6 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
                 </span>
               </p>
             </div>
-
-            {onOpenAdmin && (
-              <div className="pt-2">
-                <button
-                  onClick={onOpenAdmin}
-                  id="footer-admin-link-btn"
-                  className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-white transition-colors py-1.5 px-3 rounded-xl bg-purple-900/40 hover:bg-purple-900/80 border border-purple-800/60 cursor-pointer"
-                >
-                  <Shield className="w-3 h-3 text-purple-400" />
-                  <span>Admin Admission & Portal</span>
-                </button>
-              </div>
-            )}
           </div>
 
         </div>
@@ -226,17 +212,6 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onOpenSystemReport,
               >
                 <FileText className="w-3.5 h-3.5 text-purple-400" />
                 <span>Website Report (PDF)</span>
-              </button>
-            )}
-
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                id="footer-admin-btn"
-                className="flex items-center gap-1.5 text-purple-300 hover:text-white transition-colors bg-purple-950/60 hover:bg-purple-900/80 px-2.5 py-1 rounded-lg border border-purple-800/40 font-medium cursor-pointer"
-              >
-                <Shield className="w-3.5 h-3.5 text-purple-400" />
-                <span>Admin Dashboard</span>
               </button>
             )}
 

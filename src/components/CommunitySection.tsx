@@ -32,7 +32,7 @@ export const CommunitySection: React.FC<CommunitySectionProps> = ({ onJoinNewJou
             </h2>
 
             <p className="text-sm sm:text-base text-purple-100/90 leading-relaxed max-w-2xl mx-auto">
-              Join the Wits Lingo community and receive useful English words, sentences, learning tips and updates to keep your learning journey active.
+              Receive daily English phrases, audio pronunciation snippets, and batch announcements directly on your phone.
             </p>
 
             {/* 3 Prominent Community Social Buttons */}

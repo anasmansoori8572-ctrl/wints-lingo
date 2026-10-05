@@ -53,7 +53,7 @@ export const AboutSection: React.FC = () => {
             Language Education Made Practical, Accessible and Engaging
           </h2>
           <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
-            Wits Lingo is a language-learning platform created to make language education practical, accessible and engaging. We believe that learning a language is not simply about memorising grammar rules or vocabulary. It is about understanding, practising, communicating and developing the confidence to use the language in real life.
+            A practical language academy focused on natural concept understanding, active conversation, and real-world speaking confidence.
           </p>
         </div>
 

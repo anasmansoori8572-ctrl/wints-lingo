@@ -44,8 +44,11 @@ export interface StudentRegistration {
   razorpayPaymentId?: string;
   razorpaySignature?: string;
   googleMeetLink?: string;
-  whatsappDeliveryStatus?: 'pending' | 'sent' | 'failed';
+  whatsappDeliveryStatus?: 'pending' | 'sent' | 'failed' | 'skipped';
   whatsappMessageId?: string;
+  whatsappSentAt?: string;
+  whatsappError?: string;
+  facilities?: string[];
   registeredAt: string;
 }
 
@@ -59,6 +62,8 @@ export interface Batch {
   endDate: string;
   teacherName: string;
   scheduleTime: string;
+  classTime?: string;
+  scheduleInfo?: string;
   maxStudents: number;
   currentStudentsCount: number;
   enrolledCount?: number;
@@ -68,6 +73,7 @@ export interface Batch {
   description?: string;
   isVisibleOnWebsite?: boolean;
   googleMeetLink?: string;
+  meetLink?: string;
 }
 
 export interface ClassSession {
@@ -110,8 +116,11 @@ export interface Recording {
   notesSummary?: string;
 }
 
+export type LearningResourceType = 'pdf' | 'youtube';
+
 export interface StudyMaterial {
   id: string;
+  resourceType?: LearningResourceType;
   batchId: string;
   classId?: string;
   title: string;
@@ -130,6 +139,16 @@ export interface StudyMaterial {
   category?: string;
   level?: string;
   isVisibleOnWebsite?: boolean;
+  isPublished?: boolean;
+  displayOrder?: number;
+  youtubeUrl?: string;
+  thumbnailUrl?: string;
+  b2ThumbnailId?: string;
+  b2ThumbnailName?: string;
+  duration?: string;
+  views?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Assignment {
@@ -202,6 +221,7 @@ export interface CourseData {
   level: string;
   shortDescription: string;
   whatYouWillLearn: string[];
+  facilities?: string[];
   duration: string;
   learningFormat: string;
   fee: number;
@@ -223,6 +243,7 @@ export interface TestimonialData {
 
 export interface ResourceItem {
   id: string;
+  resourceType?: LearningResourceType;
   title: string;
   category: string;
   description: string;
@@ -236,6 +257,12 @@ export interface ResourceItem {
   batchId?: string;
   uploadedDate?: string;
   isUploaded?: boolean;
+  youtubeUrl?: string;
+  thumbnailUrl?: string;
+  duration?: string;
+  views?: string;
+  isPublished?: boolean;
+  displayOrder?: number;
 }
 
 export interface GalleryItem {
@@ -291,6 +318,12 @@ export interface SiteSettings {
   // Hero Video Management
   heroVideoUrl?: string;
   heroVideoPosterUrl?: string;
+
+  // Central Website Logo Management (Backblaze B2)
+  logoUrl?: string;
+  logoVersion?: number | string;
+  b2LogoId?: string;
+  b2LogoName?: string;
 
   // Razorpay Public Configuration
   razorpayKeyId?: string;
