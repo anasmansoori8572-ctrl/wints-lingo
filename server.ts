@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import crypto from "crypto";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { WITS_LINGO_CONFIG } from "./src/config/witsLingoConfig";
 
@@ -5499,17 +5498,18 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
 
   async function startServer() {
     // 25. VITE / STATIC MIDDLEWARE SETUP
-  if (process.env.NODE_ENV !== "production") {
-    const isHmrDisabled = process.env.DISABLE_HMR === "true";
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: isHmrDisabled ? false : undefined,
-      },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
+    if (process.env.NODE_ENV !== "production") {
+      const isHmrDisabled = process.env.DISABLE_HMR === "true";
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: isHmrDisabled ? false : undefined,
+        },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
     const distPath = path.join(process.cwd(), "dist");
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
