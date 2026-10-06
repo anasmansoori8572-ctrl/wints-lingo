@@ -8,11 +8,9 @@ import { Hero } from './components/Hero';
 import { AboutSection } from './components/AboutSection';
 import { StatsSection } from './components/StatsSection';
 import { WhatWeTeach } from './components/WhatWeTeach';
-import { PhilosophySection } from './components/PhilosophySection';
 import { CoursesSection } from './components/CoursesSection';
 import { BatchesSection } from './components/BatchesSection';
 import { LearningResources } from './components/LearningResources';
-import { TestimonialsSection } from './components/TestimonialsSection';
 import { CommunitySection } from './components/CommunitySection';
 import { FounderSection } from './components/FounderSection';
 import { ContactSection } from './components/ContactSection';
@@ -604,11 +602,6 @@ export default function App() {
           {/* 5. What We Teach: 6 Curriculum Cards (Informational Only) */}
           <WhatWeTeach />
 
-          {/* 6. Learning Philosophy: We Don't Just Teach English. We Help You Use It. */}
-          <PhilosophySection
-            onOpenAdmission={() => handleOpenAdmission()}
-          />
-
           {/* 7. Learning Resources (Combined Learn & Resources Hub in an Optimized Layout) */}
           <LearningResources
             siteSettings={siteSettings}
@@ -624,12 +617,6 @@ export default function App() {
           <CommunitySection
             siteSettings={siteSettings}
             onJoinNewJourney={() => handleOpenAdmission()}
-          />
-
-          {/* 9. Student Success / Real Experiences & Stories */}
-          <TestimonialsSection
-            testimonials={testimonials}
-            onOpenAdmission={() => handleOpenAdmission()}
           />
 
           {/* 12. About the Founder: Ziyaur Rehman Zia */}
