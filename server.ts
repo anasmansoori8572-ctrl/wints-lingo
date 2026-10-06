@@ -2178,19 +2178,18 @@ async function sendWhatsAppEnrollmentMessage(data: {
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // File uploads directory setup
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  try {
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-  } catch (e) {
-    console.warn("Could not initialize uploads directory:", e);
+// File uploads directory setup
+const uploadsDir = path.join(process.cwd(), "uploads");
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
+} catch (e) {
+  // Silent fallback for read-only serverless filesystems
+}
 
   const uploadedPdfFiles = new Map<string, {
     id: string;
@@ -5498,7 +5497,8 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     res.json({ success: true, deleted, courses: cmsContent.courses });
   });
 
-  // 25. VITE / STATIC MIDDLEWARE SETUP
+  async function startServer() {
+    // 25. VITE / STATIC MIDDLEWARE SETUP
   if (process.env.NODE_ENV !== "production") {
     const isHmrDisabled = process.env.DISABLE_HMR === "true";
     const vite = await createViteServer({
@@ -5511,10 +5511,12 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -5522,4 +5524,8 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
