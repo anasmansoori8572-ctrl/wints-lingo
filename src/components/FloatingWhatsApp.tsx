@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { Logo } from './Logo';
@@ -78,7 +78,6 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
   const internationalNumber = cleanNumber.length === 10 ? `91${cleanNumber}` : cleanNumber;
 
   const [isOpen, setIsOpen] = useState(false);
-  const [hasDismissed, setHasDismissed] = useState(false);
   const [customMsg, setCustomMsg] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(() => {
     try {
@@ -111,20 +110,6 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
     }
   };
 
-  // Auto-popup after 3.5 seconds to appeal to new visitors
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!hasDismissed) {
-        setIsOpen(true);
-        if (soundEnabledRef.current) {
-          playSubtleNotificationSound();
-        }
-      }
-    }, 3500);
-
-    return () => clearTimeout(timer);
-  }, [hasDismissed]);
-
   const handleOpenWhatsApp = (text?: string) => {
     const msgToSend = encodeURIComponent(text || customMsg || defaultMessage);
     const url = `https://wa.me/${internationalNumber}?text=${msgToSend}`;
@@ -134,7 +119,6 @@ export const FloatingWhatsApp: React.FC<FloatingWhatsAppProps> = ({
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(false);
-    setHasDismissed(true);
   };
 
   const quickOptions = [

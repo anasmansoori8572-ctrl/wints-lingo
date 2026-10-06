@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import { SiteSettings, Announcement } from '../types';
 
@@ -16,6 +16,14 @@ export const Hero: React.FC<HeroProps> = ({
   onExploreCourses, 
   siteSettings,
 }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = 0.8;
+    }
+  }, [siteSettings?.heroVideoUrl]);
+
   return (
     <section 
       id="home" 
@@ -28,6 +36,7 @@ export const Hero: React.FC<HeroProps> = ({
       {/* 1. Full-Bleed Background Video */}
       <div className="absolute inset-0 w-full h-full overflow-hidden">
         <video
+          ref={videoRef}
           key={siteSettings?.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
           className="w-full h-full object-cover object-center pointer-events-none select-none"
           src={siteSettings?.heroVideoUrl || '/video/wits-lingo-intro.mp4'}
@@ -38,6 +47,9 @@ export const Hero: React.FC<HeroProps> = ({
           playsInline
           preload="auto"
           aria-hidden="true"
+          onLoadedMetadata={(e) => {
+            e.currentTarget.playbackRate = 0.8;
+          }}
         >
           Your browser does not support the video tag.
         </video>

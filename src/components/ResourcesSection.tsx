@@ -10,14 +10,12 @@ export const ResourcesSection: React.FC = () => {
 
   const categories = [
     'All',
+    'Worksheets',
     'English Vocabulary',
     'Daily Sentences',
-    'Grammar Guides',
     'Speaking Practice',
-    'Worksheets',
-    'E-books',
     'Learning Tips',
-    'Practice Tests'
+    'Study Notes'
   ];
 
   const defaultResources: ResourceItem[] = [

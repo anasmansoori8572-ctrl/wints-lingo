@@ -65,7 +65,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'About', href: '#about', isGallery: false },
     { label: 'Learning Resources', href: '#learning-resources', isGallery: false },
     { label: 'Gallery', href: '#gallery', isGallery: true },
-    { label: 'Community', href: '#community', isGallery: false },
     { label: 'Contact', href: '#contact', isGallery: false },
   ];
 

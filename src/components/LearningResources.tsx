@@ -397,11 +397,8 @@ export const LearningResources: React.FC<LearningResourcesProps> = ({
     'Worksheets',
     'English Vocabulary',
     'Daily Sentences',
-    'Grammar Guides',
     'Speaking Practice',
-    'E-books',
     'Learning Tips',
-    'Practice Tests',
     'Study Notes'
   ];
 

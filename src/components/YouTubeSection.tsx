@@ -56,7 +56,7 @@ export const YouTubeSection: React.FC<YouTubeSectionProps> = ({ siteSettings, ma
               {/* Thumbnail Simulation */}
               <div
                 onClick={() => setSelectedVideo(video.title)}
-                className={`relative aspect-video bg-gradient-to-br ${video.thumbnailBg} p-3 flex flex-col justify-between cursor-pointer overflow-hidden`}
+                className={`relative aspect-video bg-gradient-to-br ${(video as any).thumbnailBg || 'from-purple-900 to-indigo-900'} p-3 flex flex-col justify-between cursor-pointer overflow-hidden`}
               >
                 <div className="flex justify-between items-start z-10">
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-purple-200 border border-white/10">
