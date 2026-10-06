@@ -1399,7 +1399,7 @@ let cmsContent: any = {
   settings: {
     youtubeUrl: "https://www.youtube.com/@witslingoeng"
   },
-  phoneNumbers: ["7310952271", "8791287575"],
+  phoneNumbers: ["7310952271", "8576897694"],
   email: "Witslingo@gmail.com",
   location: "Wits Lingo Academy, Dhakka, Amroha, Uttar Pradesh, India",
   whatsappChannel: "https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k",
@@ -2089,8 +2089,8 @@ async function sendWhatsAppEnrollmentMessage(data: {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const token = process.env.WHATSAPP_ACCESS_TOKEN?.trim();
   const version = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
-  const templateName = process.env.WHATSAPP_ENROLLMENT_TEMPLATE_NAME?.trim() || "wits_lingo_enrollment_confirmation";
-  const templateLang = process.env.WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "en";
+  const templateName = "wits_lingo_enrollment_confirmation";
+  const templateLang = "en";
 
   if (!phoneId || !token) {
     console.log("[WhatsApp] Meta Cloud API credentials not configured in server environment. Marked as pending.");
@@ -4071,12 +4071,12 @@ Your seat is confirmed at *WITS LINGO — A Global Language Platform*!
 • Username: ${reg.email}
 • Fee Paid: ₹${reg.feeAmount} (Verified)
 
-Mentor WhatsApp Support: +91 8791287575
+Mentor WhatsApp Support: ${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}
 www.witslingo.com`
     );
 
     const studentUrl = reg.whatsappStudentUrl || `https://api.whatsapp.com/send?phone=${recipientDigits}&text=${encodedMsg}`;
-    const adminUrl = reg.whatsappAdminUrl || `https://api.whatsapp.com/send?phone=918791287575&text=${encodedMsg}`;
+    const adminUrl = reg.whatsappAdminUrl || `https://api.whatsapp.com/send?phone=${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}&text=${encodedMsg}`;
 
     res.json({
       success: true,
@@ -5348,7 +5348,7 @@ Thank you for contacting *WITS LINGO — A Global Language Platform*!
 • *Course Interest:* ${learningInterest || 'Spoken English'}
 • *Message:* ${message.trim()}
 
-Our senior counsellor or mentor will get in touch with you shortly. You can also chat directly with us on WhatsApp: +91 8791287575.
+Our senior counsellor or mentor will get in touch with you shortly. You can also chat directly with us on WhatsApp: ${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}.
 
 *WITS LINGO*
 _Learn Easily. Speak Naturally. Think Clearly._`;
@@ -5356,7 +5356,7 @@ _Learn Easily. Speak Naturally. Think Clearly._`;
     const encodedMsg = encodeURIComponent(whatsappConfirmationText);
     const rawContactDigits = (contact || "").toString().replace(/\D/g, "");
     const studentUrl = rawContactDigits.length === 10 ? `https://wa.me/91${rawContactDigits}?text=${encodedMsg}` : null;
-    const adminUrl = `https://wa.me/918791287575?text=${encodedMsg}`;
+    const adminUrl = `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodedMsg}`;
 
     res.json({
       success: true,

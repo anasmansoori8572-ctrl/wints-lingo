@@ -21,6 +21,7 @@ import {
   Lock,
   MessageCircle
 } from 'lucide-react';
+import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
 export interface AdmissionSlipData {
   admissionId: string;
@@ -243,13 +244,13 @@ Verify Online: https://witslingo.com/verify/${data.admissionId}`;
     `• URL: https://witslingo.com/login\n` +
     `• Username: ${data.username}\n` +
     `• Password: ${data.password || 'WitsLingo@2026'}\n\n` +
-    `📞 Mentor Support: +91 8791287575\n` +
+    `📞 Mentor Support: ${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER}\n` +
     `*WITS LINGO — A Global Language Platform*`
   );
 
   const rawCleanPhone = (data.whatsapp || data.phone || '').replace(/\D/g, '');
   const recipientDigits = rawCleanPhone.length === 10 ? `91${rawCleanPhone}` : rawCleanPhone;
-  const whatsappUrl = data.whatsappStudentUrl || (recipientDigits ? `https://wa.me/${recipientDigits}?text=${fallbackWhatsappText}` : `https://wa.me/918791287575?text=${fallbackWhatsappText}`);
+  const whatsappUrl = data.whatsappStudentUrl || (recipientDigits ? `https://wa.me/${recipientDigits}?text=${fallbackWhatsappText}` : `https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${fallbackWhatsappText}`);
 
   return (
     <div className="space-y-6">

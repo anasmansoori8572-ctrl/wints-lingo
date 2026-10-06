@@ -27,6 +27,7 @@ import { AdminLoginPage } from './components/AdminLoginPage';
 import { GalleryPage } from './components/GalleryPage';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { SystemReportModal } from './components/SystemReportModal';
+import { WITS_LINGO_CONFIG } from './config/witsLingoConfig';
 
 type AdminTabType = 'students' | 'courses' | 'batches' | 'classes' | 'recordings' | 'materials' | 'youtube-lessons' | 'hero-video' | 'gallery' | 'testimonials' | 'announcements' | 'settings';
 
@@ -684,7 +685,7 @@ export default function App() {
 
       {/* Floating Corner WhatsApp Visitor Widget */}
       {currentView !== 'admin-panel' && (
-        <FloatingWhatsApp phoneNumber={siteSettings?.phone2 || "8791287575"} />
+        <FloatingWhatsApp phoneNumber={WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN} />
       )}
 
     </div>

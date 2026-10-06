@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Phone, MapPin, MessageCircle, Send, CheckCircle2, Instagram, Facebook } from 'lucide-react';
 import { SiteSettings } from '../types';
+import { WITS_LINGO_CONFIG } from '../config/witsLingoConfig';
 
 interface ContactSectionProps {
   siteSettings?: SiteSettings;
@@ -19,7 +20,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
   const [copiedMsg, setCopiedMsg] = useState(false);
 
   const phone1 = siteSettings?.phone1 || '+91 7310952271';
-  const phone2 = siteSettings?.phone2 || '+91 8791287575';
+  const phone2 = siteSettings?.phone2 || WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER;
   const email = siteSettings?.email || 'Witslingo@gmail.com';
   const address = siteSettings?.address || 'Dhakka, Amroha, Uttar Pradesh, India';
   const academyName = siteSettings?.academyName || 'WITS LINGO';
@@ -138,12 +139,12 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ siteSettings }) 
                   <div>
                     <span className="font-bold text-slate-900 block">WhatsApp Support</span>
                     <a
-                      href={`https://wa.me/918791287575?text=${encodeURIComponent("Hello! I am inquiring about Wits Lingo English courses.")}`}
+                      href={`https://wa.me/${WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER_CLEAN}?text=${encodeURIComponent("Hello! I am inquiring about Wits Lingo English courses.")}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-emerald-700 font-semibold hover:underline block text-xs sm:text-sm"
                     >
-                      Chat on WhatsApp (+91 8791287575)
+                      Chat on WhatsApp ({WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER})
                     </a>
                   </div>
                 </div>

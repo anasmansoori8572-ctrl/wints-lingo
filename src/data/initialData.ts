@@ -185,7 +185,7 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   academyName: 'WITS LINGO',
   tagline: 'A Global Language Platform',
   phone1: '+91 7310952271',
-  phone2: '+91 8791287575',
+  phone2: WITS_LINGO_CONFIG.WHATSAPP_BUSINESS_NUMBER,
   email: 'Witslingo@gmail.com',
   address: 'Dhakka, Amroha, Uttar Pradesh, India',
   whatsappChannelUrl: 'https://whatsapp.com/channel/0029Vb8dJ6C0rGiTXEMDB93k',
